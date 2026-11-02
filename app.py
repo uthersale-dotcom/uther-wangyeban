@@ -781,7 +781,7 @@ def submit_txid(code):
         if not ok:
             recent.append(now().timestamp())
             _fails[code] = recent
-            return page(code, order_body(order, message))
+            return page(code, order_body(order, message) + f'<p><a href="{support_for(order["warehouse"])}">Contact support on Telegram</a></p>')
         db["used_txids"][txid] = code
         order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
         save_db(db)
