@@ -1062,8 +1062,8 @@ def desk():
                     
     all_orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)
     show_done = request.args.get("done") == "1"
-    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid") and row.get("address")][:40]
-    done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"][:20]
+    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid") and row.get("address")][:200]
+    done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"][:200]
     if show_done:
         pending = []
     cards = []
@@ -1095,7 +1095,7 @@ def desk():
     body = f"""
     <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
     <p class="muted">回传跟踪号。新订单、付款、地址会发到管理员电报。</p>
-    <div class="pills"><a href="/desk">待处理</a><a href="/desk?done=1">已完成</a><a href="/desk/products">商品</a></div>
+    <div class="pills"><a href="/desk">待处理</a><a href="/desk?done=1">已完成</a><a href="/desk/products">商品</a><a href="/desk/export">导出CSV</a></div>
     {note_html}
     <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
      <div class="card"><b>添加订单</b>
@@ -1193,6 +1193,26 @@ def poll_staff():
 
 
 threading.Thread(target=poll_staff, daemon=True).start()
+
+@app.get("/desk/export")
+def desk_export():
+    if not desk_ok():
+        return redirect("/desk")
+    import csv
+    from io import StringIO
+    db = load_db()
+    out = StringIO()
+    w = csv.writer(out)
+    w.writerow(["订单号","仓库","状态","产品","应付","交易号","地址","跟踪号","创建时间"])
+    for order in sorted(db["orders"].values(), key=lambda x: x["created"], reverse=True):
+        goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
+        w.writerow([
+            order["id"], order["warehouse"].upper(), order["status"], goods,
+            f'{order["unique_amount"]} {order["amount_unit"]}',
+            order.get("txid") or "", order.get("address") or "",
+            order.get("tracking") or "", order["created"][:19]
+        ])
+    return out.getvalue(), 200, {"Content-Type": "text/csv", "Content-Disposition": "attachment; filename=orders.csv"}
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
