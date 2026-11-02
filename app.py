@@ -1168,6 +1168,10 @@ def save_tracking(code, tracking):
             return "订单不存在。"
         if not order.get("address"):
             return "还没有地址，不能发货。"
+        if order.get("network") == "BTC" and order.get("txid"):
+            still, status = btc_still_there(order["txid"])
+            if not still:
+                return f"比特币交易已消失（{status}），不要发货。让客户重新付款。"
         order["tracking"] = tracking
         order["status"] = "shipped"
         save_db(db)
