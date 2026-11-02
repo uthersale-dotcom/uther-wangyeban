@@ -747,6 +747,8 @@ def order_body(order, error=""):
         """
             goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
             addr = f'<p class="small">{html.escape(order.get("address") or "")}</p>' if order.get("address") else ""
+            goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
+            addr = f'<p class="small">{html.escape(order.get("address") or "")}</p>' if order.get("address") else ""
             tracking = f'<p><b>{html.escape(order["tracking"])}</b></p>' if order.get("tracking") else ""
     label = "Shipped" if order["status"] == "shipped" else "Address received"
     return head + f"""
