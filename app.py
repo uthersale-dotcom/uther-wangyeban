@@ -745,7 +745,6 @@ def order_body(order, error=""):
           <button style="width:100%;margin-top:8px">Save address</button>
         </form>
         """
-            tracking = f'<p><b>{html.escape(order["tracking"])}</b></p>' if order.get("tracking") else ""
     label = "Shipped" if order["status"] == "shipped" else "Address received"
     return head + f"""
     <div class="card"><b>{label}</b>
