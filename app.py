@@ -524,13 +524,17 @@ h1{font-size:30px;margin:4px 0 16px}
 .muted{color:#6f675c;font-size:14px}
 .row{display:flex;justify-content:space-between;gap:12px;align-items:center}
 .pills{display:flex;gap:8px;overflow:auto;margin-bottom:12px}
-.pills a,.net{border:1px solid #e4dccf;background:#fffdf8;border-radius:999px;padding:8px 14px;color:#1c1915;white-space:nowrap}
-.pills .on,.net.on{background:#1c1915;color:#f3efe6}
+.pills a{border:1px solid #e4dccf;background:#fffdf8;border-radius:999px;padding:8px 14px;color:#1c1915;white-space:nowrap;flex:0 0 auto}
+.pills .on{background:#1c1915;color:#f3efe6}
 input,textarea,select,button{font:inherit}
-input,textarea,select{width:100%;border:1px solid #e4dccf;border-radius:12px;padding:12px;background:#fff}
+input[type=text],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid #e4dccf;border-radius:12px;padding:12px;background:#fff}
+input[type=radio]{width:auto;margin:0}
 textarea{min-height:120px}
 button,.btn{border:0;border-radius:12px;background:#8c4a2f;color:#fff8f3;padding:12px 16px;font-weight:600}
-.qty{width:72px}
+input.qty{width:72px}
+.nets{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.nets label{display:flex;align-items:center;gap:10px;border:1px solid #e4dccf;background:#fffdf8;border-radius:12px;padding:12px 14px}
+.nets label:has(input:checked){background:#1c1915;color:#f3efe6;border-color:#1c1915}
 .bad{background:#f8e6e4;color:#8f2d2d;border-radius:12px;padding:12px}
 .good{background:#e7f4ec;color:#1f6b45;border-radius:12px;padding:12px}
 .warn{background:#f8efd8;color:#8a5a12;border-radius:12px;padding:12px}
@@ -592,10 +596,10 @@ def shop():
       {''.join(rows)}
       <div class="card">
         <div class="muted">Payment network</div>
-        <div class="pills" style="margin-top:8px">
-          <label class="net on"><input type="radio" name="network" value="ERC20" checked> USDT / USDC</label>
-          <label class="net"><input type="radio" name="network" value="SOL"> Solana</label>
-          <label class="net"><input type="radio" name="network" value="BTC"> Bitcoin</label>
+        <div class="nets">
+          <label><input type="radio" name="network" value="ERC20" checked><span>USDT / USDC (Ethereum)</span></label>
+          <label><input type="radio" name="network" value="SOL"><span>USDC (Solana)</span></label>
+          <label><input type="radio" name="network" value="BTC"><span>Bitcoin</span></label>
         </div>
       </div>
       <button style="width:100%">Pay</button>
