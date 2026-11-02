@@ -1,32 +1,50 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Uther Web Order — Mobile-first order page + Telegram notify + tracking
-Deploy on Railway.
+Uther Web Order — single file for Railway.
+
+Deploy:
+  1. Open this repo on GitHub.
+  2. Replace the whole app.py with this file. Commit.
+  3. Railway redeploys automatically.
+  4. Optional env: BOT_TOKEN, DESK_KEY, DATA_DIR.
+  5. Add a Railway Volume mounted at /data so orders survive restarts.
+
+Customer flow:
+  - Pay creates an order code immediately.
+  - Same code returns to payment, then address, then track.
+  - Address is locked until the transaction id is verified.
+  - Staff use /desk (key desk-uther) and Telegram notifications.
+  - This app only sends Telegram messages. It does not poll, so it will not
+    kick the Railway order bot.
 """
 
-import os
+import html
 import json
-import logging
-from datetime import datetime
+import os
+import random
+import re
+import string
+import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import Flask, request, jsonify, render_template_string
 import requests
+from flask import Flask, redirect, render_template_string, request, session, url_for
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("uther-web")
+app.secret_key = os.environ.get("SECRET_KEY", "uther-web-order-desk")
 
-# ==================== CONFIG ====================
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "5922115358").strip()
-DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-ORDERS_FILE = DATA_DIR / "web_orders.json"
+BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN") or "8971402213:AAGXCBnUIc8ublqSzcGZJAoaBBzDYQ97rkM").strip()
+DESK_KEY = os.environ.get("DESK_KEY", "desk-uther").strip()
+US_ADMINS = [5922115358, 8329090358]
+INTL_ADMINS = [5922115358, 8329090358, 8615921011]
 
-# 付款地址（按仓库）
-PAY_ADDRESSES = {
+LOCK_MINUTES = 45
+LATE_HOURS = 24
+FAIL_LIMIT = 5
+
+PAY = {
     "us": {
         "BTC": "bc1qh3jn87gse6xjw5jqdj6wz503apxrasxkq9uzlt",
         "ERC20": "0xBc37093DAC79a008D91e32E808a8bc1A2a5126E4",
@@ -37,451 +55,927 @@ PAY_ADDRESSES = {
         "ERC20": "0x554830Fc4E68bEa1a5fbB85c8E729Af795089D6A",
         "SOL": "8LVWxCqRGgGM1vn19bjTTFVckW9M6SC8hHriwr8aoeWg",
     },
-    "au": {
-        "BTC": "bc1qcvxk38mfwhusypmseqpzpczzz4n8p0k0xf360h",
-        "ERC20": "0x554830Fc4E68bEa1a5fbB85c8E729Af795089D6A",
-        "SOL": "8LVWxCqRGgGM1vn19bjTTFVckW9M6SC8hHriwr8aoeWg",
-    },
-    "uk": {
-        "BTC": "bc1qcvxk38mfwhusypmseqpzpczzz4n8p0k0xf360h",
-        "ERC20": "0x554830Fc4E68bEa1a5fbB85c8E729Af795089D6A",
-        "SOL": "8LVWxCqRGgGM1vn19bjTTFVckW9M6SC8hHriwr8aoeWg",
-    },
+}
+PAY["au"] = PAY["eu"]
+PAY["ca"] = PAY["eu"]
+PAY["uk"] = PAY["eu"]
+
+WAREHOUSES = [
+    ("us", "USA"),
+    ("eu", "Europe"),
+    ("au", "Australia"),
+    ("ca", "Canada"),
+    ("uk", "UK"),
+]
+
+USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+SOL_MINTS = {
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+    "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": "PYUSD",
+}
+US_STATES = {
+    "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA",
+    "ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK",
+    "OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
 }
 
-# 默认商品（可从 /data/products.json 覆盖）
-DEFAULT_PRODUCTS = {
-    "reta": {"name": "Reta 30mg (10 vials)", "price": 185, "warehouse": "us"},
-    "tirz": {"name": "Tirz 30mg (10 vials)", "price": 130, "warehouse": "us"},
-    "epitalon": {"name": "Epitalon 50mg (10 vials)", "price": 140, "warehouse": "us"},
-    "ss31": {"name": "SS-31 28mg (10 vials)", "price": 140, "warehouse": "us"},
-    "tb4": {"name": "TB4 20mg (10 vials)", "price": 200, "warehouse": "us"},
-}
+def P(key, name, wh, tiers, stock=None):
+    item = {"key": key, "name": name, "warehouse": wh, "tiers": {str(k): float(v) for k, v in tiers.items()}}
+    if stock is not None:
+        item["stock"] = stock
+    return item
 
-WAREHOUSES = {
-    "us": "🇺🇸 USA",
-    "eu": "🇪🇺 Europe",
-    "au": "🇦🇺 Australia",
-    "uk": "🇬🇧 UK",
-}
+EMBEDDED = [
+    P("re60", "RETA 60mg RE60-0814", "us", {"1": 276, "2": 266, "3": 256}),
+    P("re50", "reta 50mg US-RE50-0730", "us", {"1": 248, "2": 238, "3": 228}),
+    P("re40", "RETATRUTIDE 40mg re40-0719", "us", {"1": 218, "2": 208, "3": 198}),
+    P("re30", "RETA 30mg RE30-0822", "us", {"1": 189, "2": 179, "3": 169}),
+    P("re20", "reta 20mg USRE20-0906", "us", {"1": 148, "2": 138, "3": 128}),
+    P("re15", "reta 15mg USRE15-0903", "us", {"1": 143, "2": 128, "3": 118}),
+    P("RE10", "RETA 10MG RE10-0729", "us", {"1": 138, "2": 128, "3": 118}),
+    P("ze60", "TIRZEPATIDE 60mg ze60-0724", "us", {"1": 180, "2": 170, "3": 160}),
+    P("us_ze30", "tirze 30mg USZE30-0903", "us", {"1": 128, "2": 118, "3": 108}),
+    P("ze10", "tirze 10mg USZE10-0910", "us", {"1": 69, "2": 59, "3": 49}),
+    P("mito120", "MITOPRIME 120mg MITO120-0802", "us", {"1": 138, "2": 128, "3": 118}),
+    P("nask", "NA SELANK AMIDATE 10MG", "us", {"1": 80, "2": 75, "3": 70}),
+    P("nasx", "NA SEMAX AMIDATE 10MG", "us", {"1": 80, "2": 75, "3": 70}),
+    P("car40", "CARTALAX 40MG CARTA40-0730", "us", {"1": 248, "2": 238, "3": 228}),
+    P("GHK100", "GHK-Cu 100mg", "us", {"1": 79, "2": 69, "3": 59}, 0),
+    P("klow", "klow KLO80-0815", "us", {"1": 208, "2": 198, "3": 188}),
+    P("glow", "glow GLO70-0807", "us", {"1": 178, "2": 168, "3": 158}),
+    P("core45", "Coremend CORE45-0822", "us", {"1": 378, "2": 368, "3": 358}),
+    P("ss50", "ss31-50mg SS50-0815", "us", {"1": 278, "2": 268, "3": 258}),
+    P("mo40", "MOTS-C 40MG", "us", {"1": 188, "2": 178, "3": 168}),
+    P("ao5", "AOD 9604 5mg and HAC water", "us", {"1": 198, "2": 188, "3": 178}),
+    P("tbbp1010", "bpc157 10mg + tb4 10mg", "us", {"1": 158, "2": 148, "3": 138}, 0),
+    P("bp10", "bpc-157 10mg", "us", {"1": 78, "2": 68, "3": 58}),
+    P("te20", "tesamorelin 20mg", "us", {"1": 278, "2": 268, "3": 258}),
+    P("tb4", "TB4 10mg", "us", {"1": 138, "2": 128, "3": 108}),
+    P("ti103", "tesamorelin 10mg + ipamorelin 3mg", "us", {"1": 178, "2": 168, "3": 158}),
+    P("te10", "tesamorelin 10mg", "us", {"1": 156, "2": 146, "3": 126}, 0),
+    P("ip10", "ipamorelin 10mg", "us", {"1": 118, "2": 108, "3": 98}),
+    P("ci20", "CJC NO dac/ipa 10/10", "us", {"1": 167, "2": 157, "3": 147}),
+    P("naep20", "N acetyl epitalon 20mg", "us", {"1": 128, "2": 118, "3": 108}),
+    P("ctb", "cart 10mg + tb4 5mg + bp 5mg", "us", {"1": 138, "2": 128, "3": 118}, 0),
+    P("na1000", "NAD 1000mg", "us", {"1": 158, "2": 148, "3": 138}),
+    P("na500", "NAD 500mg", "us", {"1": 105, "2": 95, "3": 85}),
+    P("glu1500", "Glutathione 1500mg", "us", {"1": 139, "2": 129, "3": 119}),
+    P("kpv", "kpv 30mg", "us", {"1": 138, "2": 128, "3": 118}),
+    P("gk", "GHK50mg/KPV20mg", "us", {"1": 138, "2": 128, "3": 118}),
+    P("ta1", "THYMOSIN ALPHA-1 10mg", "us", {"1": 158, "2": 148, "3": 138}),
+    P("mt2", "MT2 10mg", "us", {"1": 65, "2": 55, "3": 50}),
+    P("pt141", "PT-141 10MG", "us", {"1": 86, "2": 76, "3": 66}),
+    P("51q", "5-AMINO-1MQ 50MG", "us", {"1": 118, "2": 108, "3": 98}),
+    P("Survodutide", "Survodutide 10mg", "us", {"1": 150}),
+    P("bac", "BAC 10mlx10vials", "us", {"1": 55}),
+    P("p21", "p21 10mg", "us", {"1": 268, "2": 248, "3": 220}),
+    P("ada", "adamax 10mg", "us", {"1": 248, "2": 238, "3": 228}),
+    P("illu", "ILLUMINEURO ILLUM-0724", "us", {"1": 248, "2": 238, "3": 228}),
+    P("ahkraw", "AHK-cu raws 10g", "us", {"1": 138}, 57),
+    P("ghkraw", "GHK-Cu raws 10g", "us", {"1": 78}, 25),
+    P("bioregulators", "Bio Regulators Special (10 vials)", "us", {"1": 180}, 39),
+    P("sr10", "sermorelin 10mg", "us", {"1": 146, "2": 136, "3": 126}),
+    P("ll5", "LL37 5mg", "us", {"1": 126, "2": 116, "3": 106}),
+    P("fox", "FOX04-DRI 10mg", "us", {"1": 278, "2": 268, "3": 258}),
+    P("eu_bac", "BAC 3ml", "eu", {"1": 40}),
+    P("eu_RE10", "Retatrutide 10mg", "eu", {"1": 138, "2": 128, "3": 118}),
+    P("eu_re20", "Reta 20mg", "eu", {"1": 148, "2": 138, "3": 128}),
+    P("re24", "reta 24mg", "eu", {"1": 168, "2": 158, "3": 148}),
+    P("eu_re30", "RETA 30mg", "eu", {"1": 189, "2": 179, "3": 169}),
+    P("eu_ze10", "Tirzepatide 10mg", "eu", {"1": 69, "2": 59, "3": 49}),
+    P("tirz30", "Tirzepatide 30mg", "eu", {"1": 128, "2": 118, "3": 108}),
+    P("eu_ze60", "Tirzepatide 60mg", "eu", {"1": 180, "2": 170, "3": 160}),
+    P("eu_klow", "KLOW 80mg", "eu", {"1": 208, "2": 198, "3": 188}),
+    P("eu_mito120", "MitoPrime 120mg", "eu", {"1": 138, "2": 128, "3": 118}),
+    P("eu_tbbp1010", "TB4 10mg BPC 10mg mix", "eu", {"1": 158, "2": 148, "3": 138}),
+    P("ds10", "DSIP 10mg", "eu", {"1": 95}),
+    P("eu_ci20", "CJC No DAC / Ipamorelin 10/10mg", "eu", {"1": 167, "2": 157, "3": 147}),
+    P("eu_ctb", "Cartalax + TB4 + BPC", "eu", {"1": 138, "2": 128, "3": 118}),
+    P("eu_51q", "5-Amino-1MQ 50mg", "eu", {"1": 118, "2": 108, "3": 98}),
+    P("eu_ip10", "Ipamorelin 10mg", "eu", {"1": 118, "2": 108, "3": 98}),
+    P("hk100", "GHK-Cu 100mg", "eu", {"1": 79, "2": 69, "3": 59}),
+    P("eu_ao5", "AOD-9604 5mg and HAC 3ml", "eu", {"1": 178, "2": 168, "3": 158}),
+    P("eu_glu1500", "GMP Glutathione 1500mg", "eu", {"1": 139, "2": 129, "3": 119}),
+    P("au_re10", "reta 10mg", "au", {"1": 120}, 0),
+    P("au_k100", "GHK-CU 100mg", "au", {"1": 90}),
+    P("au_re20", "RETA 20mg", "au", {"1": 160}, 0),
+    P("au_ze10", "Tirz 10mg", "au", {"1": 88}),
+    P("ca_re10", "reta 10mg", "ca", {"1": 140}),
+    P("ca_k100", "GHK-cu 100mg", "ca", {"1": 90}),
+    P("ca_klow", "KLOW", "ca", {"1": 260}),
+    P("ca_re20", "reta 20mg", "ca", {"1": 180}),
+    P("ca_ze10", "tirze 10mg", "ca", {"1": 90}),
+    P("tb1010", "TB4/BP157 10/10", "ca", {"1": 170}),
+    P("uk_re20", "reta 20mg", "uk", {"1": 148, "2": 138, "3": 128}),
+    P("uk_re30", "reta 30mg", "uk", {"1": 189, "2": 179, "3": 169}),
+    P("uk_ze30", "tirze 30mg", "uk", {"1": 128, "2": 118, "3": 108}),
+    P("uk_ze60", "tirze 60mg", "uk", {"1": 180, "2": 170, "3": 160}),
+    P("ci1010", "cjc no dac + ipamorelin", "uk", {"1": 167, "2": 157, "3": 147}),
+    P("uk_k100", "GHK-CU 100mg", "uk", {"1": 79, "2": 69, "3": 59}),
+    P("uk_klow", "KLOW 80mg", "uk", {"1": 208, "2": 198, "3": 188}),
+    P("51Q", "5-Amino-1MQ 50mg", "uk", {"1": 118, "2": 108, "3": 98}),
+    P("uk_glu1500", "GMP Glutathione 1500mg", "uk", {"1": 139, "2": 129, "3": 119}),
+    P("uk_ao5", "AOD-9604 5mg with HAC 3ml", "uk", {"1": 178, "2": 168, "3": 158}),
+]
 
-def load_products():
-    pfile = DATA_DIR / "products.json"
-    if pfile.exists():
-        try:
-            data = json.loads(pfile.read_text(encoding="utf-8"))
-            out = {}
-            for k, v in data.items():
-                tiers = v.get("price_tiers") or {"1": v.get("price", 0)}
-                # 确保键是字符串
-                tiers = {str(tk): float(tv) for tk, tv in tiers.items()}
-                out[k] = {
-                    "name": v.get("name", k),
-                    "price_tiers": tiers,
-                    "warehouse": v.get("warehouse", "us"),
-                    "stock": v.get("stock"),
-                }
-            return out
-        except Exception as e:
-            logger.error(f"load products: {e}")
-    return DEFAULT_PRODUCTS
+_lock = threading.Lock()
+_fails = {}
 
-def load_orders():
-    if ORDERS_FILE.exists():
-        try:
-            return json.loads(ORDERS_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-    return {}
 
-def save_orders(orders):
-    ORDERS_FILE.write_text(json.dumps(orders, ensure_ascii=False, indent=2), encoding="utf-8")
-
-def send_tg(chat_id, text):
-    if not BOT_TOKEN:
-        logger.warning("No BOT_TOKEN")
-        return False
+def data_dir():
+    preferred = Path(os.environ.get("DATA_DIR", "/data"))
     try:
-        r = requests.post(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
-            timeout=15,
+        preferred.mkdir(parents=True, exist_ok=True)
+        probe = preferred / ".write_test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        return preferred
+    except Exception:
+        fallback = Path(__file__).resolve().parent / "data"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
+DATA = data_dir()
+DB_PATH = DATA / "web_orders.json"
+
+
+def now():
+    return datetime.now(timezone.utc)
+
+
+def parse_time(value):
+    return datetime.fromisoformat(value)
+
+
+def load_db():
+    if DB_PATH.exists():
+        try:
+            data = json.loads(DB_PATH.read_text(encoding="utf-8"))
+            data.setdefault("orders", {})
+            data.setdefault("used_txids", {})
+            return data
+        except Exception:
+            pass
+    return {"orders": {}, "used_txids": {}}
+
+
+def save_db(data):
+    tmp = DB_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(DB_PATH)
+
+
+def products():
+    path = DATA / "products.json"
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            out = []
+            for key, value in raw.items():
+                tiers = value.get("price_tiers") or {"1": value.get("price", 0)}
+                item = {
+                    "key": key,
+                    "name": value.get("name", key),
+                    "warehouse": value.get("warehouse", "us"),
+                    "tiers": {str(k): float(v) for k, v in tiers.items()},
+                }
+                if "stock" in value:
+                    item["stock"] = value["stock"]
+                out.append(item)
+            if out:
+                return out
+        except Exception:
+            pass
+    return EMBEDDED
+
+
+def product_by_key(key):
+    for item in products():
+        if item["key"] == key:
+            return item
+    return None
+
+
+def unit_price(product, qty):
+    tiers = [int(k) for k in product["tiers"] if int(k) <= qty]
+    pick = str(max(tiers) if tiers else 1)
+    return float(product["tiers"].get(pick) or next(iter(product["tiers"].values())))
+
+
+def tier_label(product):
+    a = product["tiers"].get("1", next(iter(product["tiers"].values())))
+    b = product["tiers"].get("2", a)
+    c = product["tiers"].get("3", b)
+    if b == a and c == a:
+        return f"${a:g}"
+    return f"1 ${a:g} · 2 ${b:g} · 3+ ${c:g}"
+
+
+def new_id(existing):
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    for _ in range(20):
+        code = "U" + "".join(random.choice(alphabet) for _ in range(7))
+        if code not in existing:
+            return code
+    raise RuntimeError("could not make an order code")
+
+
+def btc_price():
+    try:
+        data = requests.get("https://api.coinbase.com/v2/prices/BTC-USD/spot", timeout=8).json()
+        price = float(data["data"]["amount"])
+        if price > 1000:
+            return price
+    except Exception:
+        pass
+    try:
+        data = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=8).json()
+        price = float(data["price"])
+        if price > 1000:
+            return price
+    except Exception:
+        pass
+    return 63000.0
+
+
+def unique_amount(network, total, orders):
+    for _ in range(8):
+        if network == "BTC":
+            noise = random.randint(10, 99) / 1e8
+            amount = f"{round(total / btc_price() + noise, 8):.8f}"
+            unit = "BTC"
+        else:
+            amount = f"{round(total + random.randint(10, 99) / 100, 2):.2f}"
+            unit = "USDC" if network == "SOL" else "USDT"
+        clash = any(
+            row["unique_amount"] == amount and row["network"] == network and row["status"] == "waiting_payment"
+            and parse_time(row["expires"]) > now()
+            for row in orders.values()
         )
-        return r.status_code == 200
-    except Exception as e:
-        logger.error(f"TG send: {e}")
-        return False
+        if not clash:
+            return amount, unit
+    raise RuntimeError("could not reserve a unique amount")
 
-# ==================== HTML ====================
-PAGE_HTML = r"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Uther Order</title>
+
+def support_for(wh):
+    return "https://t.me/UtherTuralyon" if wh == "us" else "https://t.me/Uthertirion"
+
+
+def address_guide(wh):
+    if wh == "uk":
+        return "Full name, street and flat, city, UK postcode (SW1A 1AA), country, and a phone that includes +44. One item per line."
+    if wh == "us":
+        return "English letters only. PO Boxes are not accepted. Full name, street, City ST ZIP, and a phone number."
+    if wh == "au":
+        return "Full name, street, suburb, state, postcode, and phone. One item per line."
+    if wh == "ca":
+        return "Full name, street, city, province, postal code, and phone. One item per line."
+    return "Full name, street, city, postal code, country, and phone with country code. One item per line."
+
+
+def validate_address(text, wh):
+    raw = (text or "").strip()
+    if wh == "us":
+        if len(raw) < 20:
+            return "Address is too short."
+        if re.search(r"[^\x00-\x7F]", raw):
+            return "Use English letters, numbers, and basic symbols only."
+        if re.search(r"\b(p\.?\s*o\.?\s*box|post\s*office\s*box|pobox)\b", raw, re.I):
+            return "PO Box addresses are not accepted. Send a real street address."
+        if not re.search(r"\b\d{5}(?:-\d{4})?\b", raw):
+            return "Missing a US ZIP code."
+        if not any(code in US_STATES for code in re.findall(r"\b([A-Za-z]{2})\b", raw)):
+            return "Missing a US state code, for example CA."
+        if len(re.sub(r"\D", "", raw)) < 10:
+            return "Missing a phone number."
+        return ""
+    if len(raw) < 15:
+        return "Address is too short."
+    if re.search(r"[\u4e00-\u9fff\u0400-\u04ff]", raw):
+        return "Use Latin letters only."
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    if len(lines) < 3:
+        return "Use at least 3 lines: name, street, city and phone."
+    if re.fullmatch(r"[\d\s-]+", lines[0]):
+        return "The first line should be the recipient name."
+    if len(re.sub(r"\D", "", raw)) < 8:
+        return "Missing a phone number."
+    if wh == "uk":
+        if not re.search(r"\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b", raw, re.I):
+            return "Missing a UK postcode, for example SW1A 1AA."
+        if "+44" not in raw.replace(" ", ""):
+            return "Phone must include +44."
+    return ""
+
+
+def notify(warehouse, text):
+    if not BOT_TOKEN:
+        return
+    ids = US_ADMINS if warehouse == "us" else INTL_ADMINS
+    for chat_id in ids:
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json={"chat_id": chat_id, "text": text[:3900]},
+                timeout=12,
+            )
+        except Exception:
+            pass
+
+
+def verify_btc(txid, address, expected):
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", txid):
+        return False, "Invalid BTC transaction id.", ""
+    try:
+        response = requests.get(f"https://mempool.space/api/tx/{txid.lower()}", timeout=15)
+        if response.status_code == 404:
+            return False, "Transaction not found yet. Wait a minute and try again.", ""
+        response.raise_for_status()
+        data = response.json()
+    except Exception:
+        return False, "Bitcoin lookup failed. Try again in a minute.", ""
+    paid = 0.0
+    found = False
+    for out in data.get("vout") or []:
+        if (out.get("scriptpubkey_address") or "").lower() == address.lower():
+            found = True
+            paid += (out.get("value") or 0) / 1e8
+    if not found:
+        return False, "This transaction did not pay our Bitcoin address.", ""
+    if paid + 1e-8 < expected * 0.98:
+        return False, f"Amount too low. Expected about {expected:.8f} BTC, received {paid:.8f}.", ""
+    if paid > expected * 1.02 + 1e-8:
+        return False, f"Amount does not match. Expected about {expected:.8f} BTC, received {paid:.8f}.", ""
+    state = "confirmed" if (data.get("status") or {}).get("confirmed") else "seen, waiting for confirmation"
+    return True, f"Verified {paid:.8f} BTC ({state}).", "BTC"
+
+
+def verify_erc20(txid, address, expected):
+    hashed = txid if txid.startswith("0x") else "0x" + txid
+    if not re.fullmatch(r"0x[0-9a-fA-F]{64}", hashed):
+        return False, "Invalid Ethereum transaction id.", ""
+    body = {"jsonrpc": "2.0", "id": 1, "method": "eth_getTransactionReceipt", "params": [hashed]}
+    receipt = None
+    for rpc in ("https://ethereum-rpc.publicnode.com", "https://rpc.ankr.com/eth", "https://eth.llamarpc.com"):
+        try:
+            payload = requests.post(rpc, json=body, timeout=12).json()
+            if payload.get("result"):
+                receipt = payload["result"]
+                break
+        except Exception:
+            continue
+    if not receipt:
+        return False, "Transaction not found yet. Wait and submit the same id again.", ""
+    if receipt.get("status") == "0x0":
+        return False, "This transaction failed on Ethereum.", ""
+    padded = "0x" + address[2:].lower().zfill(64)
+    amount = 0.0
+    token = ""
+    for log in receipt.get("logs") or []:
+        topics = log.get("topics") or []
+        if not topics or topics[0].lower() != TRANSFER:
+            continue
+        if len(topics) < 3 or topics[2].lower() != padded:
+            continue
+        contract = (log.get("address") or "").lower()
+        if contract not in (USDT.lower(), USDC.lower()):
+            continue
+        amount += int(log.get("data") or "0x0", 16) / 1_000_000
+        token = "USDT" if contract == USDT.lower() else "USDC"
+    if not token:
+        return False, "No USDT or USDC transfer to our address in this transaction.", ""
+    if amount < expected * 0.995:
+        return False, f"Amount too low. Expected about ${expected:.2f}, received ${amount:.2f} {token}.", ""
+    if amount > expected * 1.02:
+        return False, f"Amount does not match. Expected about ${expected:.2f}, received ${amount:.2f} {token}.", ""
+    return True, f"Verified ${amount:.2f} {token}.", token
+
+
+def verify_sol(txid, address, expected):
+    if not 64 <= len(txid) <= 100:
+        return False, "Invalid Solana transaction id.", ""
+    body = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getTransaction",
+        "params": [txid, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0, "commitment": "confirmed"}],
+    }
+    data = None
+    for rpc in ("https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com"):
+        try:
+            payload = requests.post(rpc, json=body, timeout=15).json()
+            if payload.get("result"):
+                data = payload["result"]
+                break
+        except Exception:
+            continue
+    if not data:
+        return False, "Transaction not found yet. Wait and submit the same id again.", ""
+    meta = data.get("meta") or {}
+    if meta.get("err") is not None:
+        return False, "This Solana transaction failed.", ""
+
+    def mapped(rows):
+        out = {}
+        for row in rows or []:
+            ui = ((row.get("uiTokenAmount") or {}).get("uiAmount"))
+            if row.get("owner") and row.get("mint") and ui is not None:
+                out[f"{row['owner']}|{row['mint']}"] = float(ui)
+        return out
+
+    pre = mapped(meta.get("preTokenBalances"))
+    post = mapped(meta.get("postTokenBalances"))
+    matched = 0.0
+    token = ""
+    for key in set(pre) | set(post):
+        owner, mint = key.split("|", 1)
+        if owner != address or mint not in SOL_MINTS:
+            continue
+        delta = post.get(key, 0) - pre.get(key, 0)
+        if delta > 0:
+            matched += delta
+            token = SOL_MINTS[mint]
+    if not token:
+        return False, "No USDC, USDT, or PYUSD arrived at our Solana address.", ""
+    if matched < expected * 0.995:
+        return False, f"Amount too low. Expected about ${expected:.2f}, received ${matched:.2f} {token}.", ""
+    if matched > expected * 1.02:
+        return False, f"Amount does not match. Expected about ${expected:.2f}, received ${matched:.2f} {token}.", ""
+    return True, f"Verified ${matched:.2f} {token} on Solana.", token
+
+
+def window_open(order):
+    return now() <= parse_time(order["expires"]) + timedelta(hours=LATE_HOURS)
+
+
+STYLE = """
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f7; color: #1d1d1f; }
-.container { max-width: 480px; margin: 0 auto; padding: 16px; }
-h1 { font-size: 22px; margin-bottom: 16px; text-align: center; }
-.section { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.section h2 { font-size: 15px; margin-bottom: 10px; color: #333; }
-select, input, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; margin-bottom: 8px; }
-textarea { min-height: 80px; resize: vertical; }
-.product { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
-.product:last-child { border-bottom: none; }
-.product .info { flex: 1; }
-.product .name { font-weight: 500; font-size: 14px; }
-.product .tiers { color: #0071e3; font-size: 12px; margin-top: 2px; }
-.product .stock { color: #888; font-size: 11px; }
-.qty { display: flex; align-items: center; gap: 8px; }
-.qty button { width: 32px; height: 32px; border: 1px solid #ddd; background: #f5f5f7; border-radius: 6px; font-size: 18px; cursor: pointer; }
-.qty span { min-width: 24px; text-align: center; }
-.total { font-size: 18px; font-weight: 600; text-align: right; margin-top: 8px; }
-.btn { width: 100%; padding: 14px; background: #0071e3; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
-.btn:disabled { background: #ccc; }
-.pay-box { background: #f0f7ff; border-radius: 8px; padding: 12px; margin-top: 8px; font-size: 13px; word-break: break-all; }
-.pay-box code { display: block; margin: 4px 0; font-family: monospace; }
-.success { text-align: center; padding: 40px 16px; }
-.success h2 { color: #34c759; margin-bottom: 8px; }
-.hidden { display: none; }
-.admin-link { text-align: center; margin-top: 20px; font-size: 12px; color: #999; }
-.admin-link a { color: #0071e3; }
+*{box-sizing:border-box}
+body{margin:0;background:#f3efe6;color:#1c1915;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:20px 16px 48px}
+a{color:#8c4a2f;text-decoration:none}
+h1{font-size:30px;margin:4px 0 16px}
+.top{display:flex;justify-content:space-between;align-items:end}
+.card{background:#fffdf8;border:1px solid #e4dccf;border-radius:16px;padding:14px;margin:0 0 12px}
+.muted{color:#6f675c;font-size:14px}
+.row{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.pills{display:flex;gap:8px;overflow:auto;margin-bottom:12px}
+.pills a,.net{border:1px solid #e4dccf;background:#fffdf8;border-radius:999px;padding:8px 14px;color:#1c1915;white-space:nowrap}
+.pills .on,.net.on{background:#1c1915;color:#f3efe6}
+input,textarea,select,button{font:inherit}
+input,textarea,select{width:100%;border:1px solid #e4dccf;border-radius:12px;padding:12px;background:#fff}
+textarea{min-height:120px}
+button,.btn{border:0;border-radius:12px;background:#8c4a2f;color:#fff8f3;padding:12px 16px;font-weight:600}
+.qty{width:72px}
+.bad{background:#f8e6e4;color:#8f2d2d;border-radius:12px;padding:12px}
+.good{background:#e7f4ec;color:#1f6b45;border-radius:12px;padding:12px}
+.warn{background:#f8efd8;color:#8a5a12;border-radius:12px;padding:12px}
+code,input.copy{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.small{font-size:13px}
 </style>
-</head>
-<body>
-<div class="container">
-  <h1>Uther Order</h1>
-
-  <div id="form-view">
-    <div class="section">
-      <h2>Warehouse</h2>
-      <select id="warehouse" onchange="filterProducts()">
-        <option value="us">🇺🇸 USA</option>
-        <option value="eu">🇪🇺 Europe</option>
-        <option value="au">🇦🇺 Australia</option>
-        <option value="uk">🇬🇧 UK</option>
-      </select>
-    </div>
-
-    <div class="section">
-      <h2>Products</h2>
-      <div id="products"></div>
-      <div class="total">Total: $<span id="total">0</span></div>
-    </div>
-
-    <div class="section">
-      <h2>Shipping Address</h2>
-      <textarea id="address" placeholder="Full name, street, city, state, ZIP, phone"></textarea>
-    </div>
-
-    <div class="section">
-      <h2>Payment Network</h2>
-      <select id="network">
-        <option value="BTC">BTC</option>
-        <option value="ERC20">USDT/USDC (ERC20)</option>
-        <option value="SOL">USDC (Solana)</option>
-      </select>
-      <div class="pay-box" id="pay-info"></div>
-    </div>
-
-    <div class="section">
-      <h2>Your Telegram (optional, for tracking)</h2>
-      <input id="tg_user" placeholder="@username or leave blank">
-    </div>
-
-    <button class="btn" id="submit-btn" onclick="submitOrder()">Place Order</button>
-  </div>
-
-  <div id="success-view" class="hidden success">
-    <h2>Order Received</h2>
-    <p>Order ID: <strong id="order-id"></strong></p>
-    <p style="margin-top:12px;">Please send payment to the address shown, then wait for confirmation.</p>
-    <button class="btn" style="margin-top:20px;" onclick="location.reload()">New Order</button>
-  </div>
-
-  <div class="admin-link"><a href="/admin">Admin</a></div>
-</div>
-
-<script>
-const PRODUCTS = {{ products | tojson }};
-const PAY = {{ pay | tojson }};
-let cart = {};
-
-function filterProducts() {
-  const wh = document.getElementById('warehouse').value;
-  const box = document.getElementById('products');
-  box.innerHTML = '';
-  cart = {};
-  for (const [k, p] of Object.entries(PRODUCTS)) {
-    if (p.warehouse && p.warehouse !== wh) continue;
-    const tiers = p.price_tiers || {"1": p.price || 0};
-    const p1 = tiers["1"] || tiers["1.0"] || Object.values(tiers)[0];
-    const p2 = tiers["2"] || tiers["2.0"] || p1;
-    const p3 = tiers["3"] || tiers["3.0"] || p2;
-    const stockText = (p.stock === 0) ? '<div class="stock">Sold out</div>' : (p.stock != null ? `<div class="stock">Stock: ${p.stock}</div>` : '');
-    const div = document.createElement('div');
-    div.className = 'product';
-    div.innerHTML = `
-      <div class="info">
-        <div class="name">${p.name}</div>
-        <div class="tiers">1: $${p1} &nbsp; 2: $${p2} &nbsp; 3+: $${p3}</div>
-        ${stockText}
-      </div>
-      <div class="qty">
-        <button onclick="changeQty('${k}', -1)">−</button>
-        <span id="qty-${k}">0</span>
-        <button onclick="changeQty('${k}', 1)" ${p.stock === 0 ? 'disabled' : ''}>+</button>
-      </div>`;
-    box.appendChild(div);
-  }
-  updateTotal();
-  updatePay();
-}
-
-function getUnitPrice(key, qty) {
-  const p = PRODUCTS[key];
-  if (!p) return 0;
-  const tiers = p.price_tiers || {"1": p.price || 0};
-  const applicable = Math.max(...Object.keys(tiers).map(Number).filter(t => t <= qty), 1);
-  return tiers[String(applicable)] || tiers["1"] || 0;
-}
-
-function changeQty(key, d) {
-  const p = PRODUCTS[key];
-  if (p && p.stock === 0 && d > 0) return;
-  cart[key] = Math.max(0, (cart[key] || 0) + d);
-  document.getElementById('qty-' + key).textContent = cart[key];
-  updateTotal();
-}
-
-function updateTotal() {
-  let t = 0;
-  for (const [k, q] of Object.entries(cart)) {
-    if (q > 0 && PRODUCTS[k]) {
-      const unit = getUnitPrice(k, q);
-      t += unit * q;
-    }
-  }
-  document.getElementById('total').textContent = t.toFixed(2);
-  return t;
-}
-
-function updatePay() {
-  const wh = document.getElementById('warehouse').value;
-  const net = document.getElementById('network').value;
-  const addr = (PAY[wh] || PAY.us)[net] || '';
-  document.getElementById('pay-info').innerHTML = addr ? `<b>${net}</b><code>${addr}</code>` : 'No address';
-}
-
-document.getElementById('warehouse').onchange = filterProducts;
-document.getElementById('network').onchange = updatePay;
-
-function submitOrder() {
-  const items = [];
-  for (const [k, q] of Object.entries(cart)) {
-    if (q > 0) {
-      const unit = getUnitPrice(k, q);
-      items.push({ key: k, name: PRODUCTS[k].name, qty: q, price: unit, line: +(unit * q).toFixed(2) });
-    }
-  }
-  if (!items.length) { alert('Please select at least one product'); return; }
-  const address = document.getElementById('address').value.trim();
-  if (address.length < 10) { alert('Please enter a full address'); return; }
-
-  const btn = document.getElementById('submit-btn');
-  btn.disabled = true;
-  btn.textContent = 'Submitting...';
-
-  fetch('/api/order', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      warehouse: document.getElementById('warehouse').value,
-      network: document.getElementById('network').value,
-      items: items,
-      total: updateTotal(),
-      address: address,
-      tg_user: document.getElementById('tg_user').value.trim(),
-    }),
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) {
-      document.getElementById('form-view').classList.add('hidden');
-      document.getElementById('success-view').classList.remove('hidden');
-      document.getElementById('order-id').textContent = d.order_id;
-    } else {
-      alert(d.error || 'Failed');
-      btn.disabled = false;
-      btn.textContent = 'Place Order';
-    }
-  })
-  .catch(() => {
-    alert('Network error');
-    btn.disabled = false;
-    btn.textContent = 'Place Order';
-  });
-}
-
-filterProducts();
-</script>
-</body>
-</html>
 """
 
-ADMIN_HTML = r"""
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin - Tracking</title>
-<style>
-* { box-sizing: border-box; }
-body { font-family: -apple-system, sans-serif; background: #f5f5f7; margin: 0; padding: 16px; }
-.container { max-width: 600px; margin: 0 auto; }
-h1 { font-size: 20px; }
-.card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.card .id { font-weight: 600; color: #0071e3; }
-.card .meta { font-size: 13px; color: #666; margin: 4px 0; }
-input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-top: 6px; }
-button { margin-top: 6px; padding: 8px 16px; background: #0071e3; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-.done { opacity: .6; }
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>Pending Orders</h1>
-  <div id="list">Loading...</div>
-</div>
-<script>
-function load() {
-  fetch('/api/orders').then(r => r.json()).then(orders => {
-    const box = document.getElementById('list');
-    const pending = Object.entries(orders).filter(([id, o]) => o.status !== 'shipped');
-    if (!pending.length) { box.innerHTML = '<p>No pending orders</p>'; return; }
-    box.innerHTML = pending.map(([id, o]) => `
-      <div class="card" id="card-${id}">
-        <div class="id">${id}</div>
-        <div class="meta">${o.warehouse || ''} | $${o.total} | ${o.network}</div>
-        <div class="meta">${(o.items || []).map(i => i.name + ' x' + i.qty).join(', ')}</div>
-        <div class="meta">${o.address || ''}</div>
-        <div class="meta">TG: ${o.tg_user || '-'}</div>
-        <input id="track-${id}" placeholder="Tracking number">
-        <button onclick="ship('${id}')">Send Tracking</button>
-      </div>
-    `).join('');
-  });
-}
-function ship(id) {
-  const tracking = document.getElementById('track-' + id).value.trim();
-  if (!tracking) { alert('Enter tracking'); return; }
-  fetch('/api/track', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ order_id: id, tracking: tracking }),
-  }).then(r => r.json()).then(d => {
-    if (d.ok) {
-      document.getElementById('card-' + id).classList.add('done');
-      alert('Sent');
-    } else alert(d.error || 'Failed');
-  });
-}
-load();
-</script>
-</body>
-</html>
-"""
+PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title }}</title>""" + STYLE + """</head><body><main>{{ body|safe }}</main></body></html>"""
 
-# ==================== ROUTES ====================
-@app.route("/")
-def index():
-    products = load_products()
-    return render_template_string(PAGE_HTML, products=products, pay=PAY_ADDRESSES)
 
-@app.route("/admin")
-def admin():
-    return render_template_string(ADMIN_HTML)
+def page(title, body):
+    return render_template_string(PAGE, title=title, body=body)
 
-@app.route("/api/order", methods=["POST"])
-def api_order():
-    data = request.get_json(force=True)
-    items = data.get("items") or []
-    if not items:
-        return jsonify(ok=False, error="No items")
-    address = (data.get("address") or "").strip()
-    if len(address) < 10:
-        return jsonify(ok=False, error="Address too short")
 
-    order_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    order = {
-        "order_id": order_id,
-        "warehouse": data.get("warehouse", "us"),
-        "network": data.get("network", "BTC"),
-        "items": items,
-        "total": data.get("total", 0),
-        "address": address,
-        "tg_user": data.get("tg_user", ""),
-        "status": "pending",
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    orders = load_orders()
-    orders[order_id] = order
-    save_orders(orders)
-
-    # Telegram notify
-    wh = WAREHOUSES.get(order["warehouse"], order["warehouse"])
-    lines = [f"• {i['name']} × {i['qty']}" for i in items]
-    text = (
-        f"🆕 <b>新网页订单</b>\n"
-        f"订单：<code>{order_id}</code>\n"
-        f"仓库：{wh}\n"
-        f"金额：${order['total']} ({order['network']})\n"
-        f"商品：\n" + "\n".join(lines) + "\n"
-        f"地址：{address}\n"
-        f"客户TG：{order['tg_user'] or '未填'}"
-    )
-    send_tg(ADMIN_CHAT_ID, text)
-
-    return jsonify(ok=True, order_id=order_id)
-
-@app.route("/api/orders")
-def api_orders():
-    return jsonify(load_orders())
-
-@app.route("/api/track", methods=["POST"])
-def api_track():
-    data = request.get_json(force=True)
-    order_id = data.get("order_id", "").strip()
-    tracking = data.get("tracking", "").strip()
-    if not order_id or not tracking:
-        return jsonify(ok=False, error="Missing fields")
-
-    orders = load_orders()
-    order = orders.get(order_id)
-    if not order:
-        return jsonify(ok=False, error="Order not found")
-
-    order["tracking"] = tracking
-    order["status"] = "shipped"
-    order["shipped_at"] = datetime.utcnow().isoformat()
-    orders[order_id] = order
-    save_orders(orders)
-
-    # Notify admin
-    send_tg(ADMIN_CHAT_ID, f"📦 订单 <code>{order_id}</code> 已发货\n跟踪号：<code>{tracking}</code>")
-
-    # If customer left TG username, try to notify (optional, needs their chat id stored)
-    # For now just admin gets it; customer can be told manually or via their username search
-
-    return jsonify(ok=True)
-
-@app.route("/health")
+@app.get("/health")
 def health():
     return "ok"
 
+
+@app.get("/")
+def shop():
+    wh = request.args.get("wh", "us")
+    if wh not in PAY:
+        wh = "us"
+    items = [item for item in products() if item["warehouse"] == wh]
+    pills = "".join(
+        f'<a class="{"on" if code == wh else ""}" href="/?wh={code}">{label}</a>'
+        for code, label in WAREHOUSES
+    )
+    rows = []
+    for item in items:
+        sold = item.get("stock") == 0
+        stock = ""
+        if sold:
+            stock = '<div class="small muted">Sold out</div>'
+        elif item.get("stock"):
+            stock = f'<div class="small muted">{item["stock"]} left</div>'
+        disabled = "disabled" if sold else ""
+        rows.append(
+            f'<div class="card"><div class="row"><div><b>{html.escape(item["name"])}</b>'
+            f'<div class="small" style="color:#8c4a2f">{html.escape(tier_label(item))}</div>{stock}</div>'
+            f'<input class="qty" type="number" min="0" max="50" name="qty_{html.escape(item["key"])}" value="0" {disabled}></div></div>'
+        )
+    body = f"""
+    <div class="top"><div><div class="small muted">UTHER</div><h1>Order desk</h1></div><a href="/track">Track</a></div>
+    <div id="recent"></div>
+    <div class="card"><div class="muted">Already started an order?</div>
+      <form action="/track" method="get" class="row" style="margin-top:8px">
+        <input name="id" placeholder="Order code" style="text-transform:uppercase">
+        <button>Open</button>
+      </form>
+    </div>
+    <div class="pills">{pills}</div>
+    <form method="post" action="/checkout">
+      <input type="hidden" name="warehouse" value="{wh}">
+      {''.join(rows)}
+      <div class="card">
+        <div class="muted">Payment network</div>
+        <div class="pills" style="margin-top:8px">
+          <label class="net on"><input type="radio" name="network" value="ERC20" checked> USDT / USDC</label>
+          <label class="net"><input type="radio" name="network" value="SOL"> Solana</label>
+          <label class="net"><input type="radio" name="network" value="BTC"> Bitcoin</label>
+        </div>
+      </div>
+      <button style="width:100%">Pay</button>
+    </form>
+    <script>
+    const key="uther-orders";
+    try {{
+      const ids=JSON.parse(localStorage.getItem(key)||"[]");
+      if(Array.isArray(ids)&&ids.length){{
+        document.getElementById("recent").innerHTML=ids.slice(0,8).map(id=>
+          '<a class="card" style="display:block" href="/order/'+id+'">Continue order <b>'+id+'</b></a>').join("");
+      }}
+    }} catch(e) {{}}
+    </script>
+    """
+    return page("Uther Order", body)
+
+
+@app.post("/checkout")
+def checkout():
+    wh = request.form.get("warehouse", "us")
+    network = request.form.get("network", "ERC20")
+    if wh not in PAY or network not in ("BTC", "ERC20", "SOL"):
+        return page("Order", '<p class="bad">Choose a warehouse and network.</p><a href="/">Back</a>'), 400
+    lines = []
+    catalog = {item["key"]: item for item in products()}
+    for key, product in catalog.items():
+        if product["warehouse"] != wh:
+            continue
+        try:
+            qty = int(request.form.get(f"qty_{key}") or 0)
+        except ValueError:
+            qty = 0
+        if qty <= 0:
+            continue
+        if product.get("stock") == 0:
+            return page("Order", f'<p class="bad">{html.escape(product["name"])} is sold out.</p><a href="/">Back</a>'), 400
+        unit = unit_price(product, qty)
+        lines.append({
+            "key": key,
+            "name": product["name"],
+            "qty": qty,
+            "unit": round(unit, 2),
+            "line": round(unit * qty, 2),
+        })
+    if not lines:
+        return page("Order", '<p class="bad">Select at least one product.</p><a href="/">Back</a>'), 400
+    total = round(sum(line["line"] for line in lines), 2)
+    with _lock:
+        db = load_db()
+        try:
+            amount, unit = unique_amount(network, total, db["orders"])
+        except Exception:
+            return page("Order", '<p class="bad">Could not reserve a payment amount. Try again.</p><a href="/">Back</a>'), 500
+        code = new_id(db["orders"])
+        created = now()
+        order = {
+            "id": code,
+            "warehouse": wh,
+            "network": network,
+            "items": lines,
+            "total": total,
+            "unique_amount": amount,
+            "amount_unit": unit,
+            "pay_address": PAY[wh][network],
+            "status": "waiting_payment",
+            "txid": "",
+            "verify_msg": "",
+            "token": "",
+            "address": "",
+            "tracking": "",
+            "created": created.isoformat(),
+            "expires": (created + timedelta(minutes=LOCK_MINUTES)).isoformat(),
+        }
+        db["orders"][code] = order
+        save_db(db)
+    notify(wh, f"新网页订单 {code}\n{wh.upper()} · {network}\n应付 {amount} {unit}\n客户用这个订单号可以回到付款页。")
+    return redirect(url_for("order_page", code=code))
+
+
+def order_body(order, error=""):
+    items = "".join(
+        f'<div class="row"><span>{html.escape(item["name"])} × {item["qty"]}</span><b>${item["line"]:.2f}</b></div>'
+        for item in order["items"]
+    )
+    err = f'<p class="bad">{html.escape(error)}</p>' if error else ""
+    head = f"""
+    <div class="top"><a href="/">Shop</a><b>{order["id"]}</b></div>
+    <div class="card"><div class="small muted">Order code</div><div style="font-size:28px">{order["id"]}</div>
+      <div class="muted">Keep this code. If the page closes, open Track and enter it.</div></div>
+    <div class="card">{items}<div class="row" style="margin-top:8px"><span>Catalog total</span><b>${order["total"]:.2f}</b></div></div>
+    {err}
+    """
+    if order["status"] == "waiting_payment":
+        if not window_open(order):
+            return head + '<p class="bad">This payment window has closed. If you already paid, contact support and do not pay again.</p>'
+        return head + f"""
+        <div class="warn">The price lock lasts 45 minutes. You can still submit the transaction id for 24 hours after that. Do not pay a second time. Come back with code {order["id"]}.</div>
+        <div class="card"><div class="small muted">Send exactly</div>
+          <div style="font-size:24px">{order["unique_amount"]} {order["amount_unit"]}</div>
+          <div class="small muted" style="margin-top:10px">{order["network"]}</div>
+          <input class="copy" readonly value="{html.escape(order["pay_address"])}"></div>
+        <form method="post" action="/order/{order["id"]}/txid">
+          <textarea name="txid" placeholder="Paste the transaction id"></textarea>
+          <button style="width:100%;margin-top:8px">Submit transaction id</button>
+        </form>
+        <p><a href="{support_for(order["warehouse"])}">Contact support</a></p>
+        """
+    if order["status"] == "waiting_address":
+        warn = ""
+        if order["warehouse"] == "us":
+            warn = '<div class="warn">PO Box addresses are not accepted. Send a real street address.</div>'
+        return head + f"""
+        <div class="good">{html.escape(order.get("verify_msg") or "Payment verified.")} Address is next. It was locked until this step.</div>
+        {warn}
+        <p class="muted">{html.escape(address_guide(order["warehouse"]))}</p>
+        <form method="post" action="/order/{order["id"]}/address">
+          <textarea name="address" placeholder="Name&#10;Street&#10;City, region, postcode&#10;Phone"></textarea>
+          <button style="width:100%;margin-top:8px">Save address</button>
+        </form>
+        """
+    tracking = f'<p><b>{html.escape(order["tracking"])}</b></p>' if order.get("tracking") else ""
+    label = "Shipped" if order["status"] == "shipped" else "Address received"
+    return head + f"""
+    <div class="card"><b>{label}</b>
+      <p class="muted">Keep code {order["id"]}. Check it any time on the track page.</p>
+      {tracking}
+      <a href="/track?id={order["id"]}">Track this order</a>
+    </div>
+    """
+
+
+@app.get("/order/<code>")
+def order_page(code):
+    db = load_db()
+    order = db["orders"].get(code.upper())
+    if not order:
+        return page("Not found", '<h1>Order not found</h1><a href="/track">Look up an order</a>'), 404
+    body = order_body(order) + f"""
+    <script>
+    try {{
+      const key="uther-orders";
+      const ids=JSON.parse(localStorage.getItem(key)||"[]").filter(id=>id!=="{order["id"]}");
+      localStorage.setItem(key, JSON.stringify(["{order["id"]}", ...ids].slice(0,8)));
+    }} catch(e) {{}}
+    </script>
+    """
+    return page(order["id"], body)
+
+
+@app.post("/order/<code>/txid")
+def submit_txid(code):
+    code = code.upper()
+    txid = re.sub(r"\s+", "", request.form.get("txid") or "")
+    with _lock:
+        db = load_db()
+        order = db["orders"].get(code)
+        if not order:
+            return page("Not found", '<h1>Order not found</h1>'), 404
+        if order["status"] != "waiting_payment":
+            return redirect(url_for("order_page", code=code))
+        if not window_open(order):
+            return page(code, order_body(order, "This payment window has closed. If you already paid, do not pay again."))
+        recent = [stamp for stamp in _fails.get(code, []) if now().timestamp() - stamp < 600]
+        if len(recent) >= FAIL_LIMIT:
+            return page(code, order_body(order, "Too many failed checks. Wait 10 minutes, or contact support."))
+        if txid.lower() in {key.lower(): value for key, value in db["used_txids"].items()}:
+            return page(code, order_body(order, "This transaction id was already used."))
+        expected = float(order["unique_amount"])
+        if order["network"] == "BTC":
+            ok, message, token = verify_btc(txid.lower(), order["pay_address"], expected)
+        elif order["network"] == "ERC20":
+            ok, message, token = verify_erc20(txid.lower(), order["pay_address"], expected)
+        else:
+            ok, message, token = verify_sol(txid, order["pay_address"], expected)
+        if not ok:
+            recent.append(now().timestamp())
+            _fails[code] = recent
+            return page(code, order_body(order, message))
+        db["used_txids"][txid] = code
+        order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
+        save_db(db)
+        _fails.pop(code, None)
+    notify(order["warehouse"], f"付款已核验 {code}\n{order['warehouse'].upper()} · {order['network']} · {order['unique_amount']} {order['amount_unit']}\n{message}\n客户现在才能填地址。页面关了也用同一订单号回来。")
+    return redirect(url_for("order_page", code=code))
+
+
+@app.post("/order/<code>/address")
+def submit_address(code):
+    code = code.upper()
+    address = (request.form.get("address") or "").strip()
+    with _lock:
+        db = load_db()
+        order = db["orders"].get(code)
+        if not order:
+            return page("Not found", '<h1>Order not found</h1>'), 404
+        if order["status"] != "waiting_address":
+            return page(code, order_body(order, "Address opens only after the payment is verified."))
+        error = validate_address(address, order["warehouse"])
+        if error:
+            return page(code, order_body(order, error))
+        order["address"] = address
+        order["status"] = "paid"
+        save_db(db)
+    notify(order["warehouse"], f"地址已提交 {code}\n{order['warehouse'].upper()} · {order['network']}\n{address}\n\n到网站 /desk 回传跟踪号。")
+    return redirect(url_for("order_page", code=code))
+
+
+@app.route("/track", methods=["GET"])
+def track():
+    code = (request.args.get("id") or "").strip().upper()
+    result = ""
+    if code:
+        order = load_db()["orders"].get(code)
+        if not order:
+            result = '<p class="bad">Order not found.</p>'
+        else:
+            label = {
+                "waiting_payment": "Waiting for payment",
+                "waiting_address": "Payment checked. Address still needed.",
+                "paid": "Preparing shipment",
+                "shipped": "Shipped",
+            }.get(order["status"], order["status"])
+            tracking = f'<p><b>{html.escape(order["tracking"])}</b></p>' if order.get("tracking") else ""
+            cont = ""
+            if order["status"] in ("waiting_payment", "waiting_address"):
+                cont = f'<p><a href="/order/{code}">Continue this order</a></p>'
+            result = f'<div class="card"><div class="small muted">{code}</div><h2>{label}</h2>{tracking}{cont}</div>'
+    body = f"""
+    <a href="/">Shop</a><h1>Track</h1>
+    <p class="muted">The order code brings you back. Before payment is checked, you return to the transaction id. After it is checked, you return to the address form. After shipping, the tracking number shows here.</p>
+    <form class="row">
+      <input name="id" value="{html.escape(code)}" placeholder="Uxxxxxxx" style="text-transform:uppercase">
+      <button>Check</button>
+    </form>
+    {result}
+    """
+    return page("Track", body)
+
+
+def desk_ok():
+    return session.get("desk") == DESK_KEY
+
+
+@app.route("/desk", methods=["GET", "POST"])
+def desk():
+    if request.method == "POST" and request.form.get("action") == "login":
+        if request.form.get("key") == DESK_KEY:
+            session["desk"] = DESK_KEY
+        else:
+            return page("后台", '<h1>后台</h1><p class="bad">钥匙不对。</p><a href="/desk">返回</a>')
+    if request.method == "POST" and request.form.get("action") == "logout":
+        session.pop("desk", None)
+        return redirect("/desk")
+    if not desk_ok():
+        return page("后台", """
+        <h1>后台</h1>
+        <p class="muted">客户在网页下单。客服在这里补核、回传跟踪号。</p>
+        <form method="post"><input type="hidden" name="action" value="login">
+          <input type="password" name="key" placeholder="后台钥匙">
+          <button style="width:100%;margin-top:8px">打开</button>
+        </form>
+        """)
+    note = ""
+    if request.method == "POST":
+        action = request.form.get("action")
+        code = (request.form.get("id") or "").upper()
+        with _lock:
+            db = load_db()
+            order = db["orders"].get(code)
+            if action == "accept" and order and order["status"] == "waiting_payment":
+                order["status"] = "waiting_address"
+                order["verify_msg"] = "Accepted by staff"
+                save_db(db)
+                note = f"{code} 已人工确认。"
+            elif action == "track" and order:
+                tracking = (request.form.get("tracking") or "").strip()
+                if not order.get("address"):
+                    note = "还没有地址，不能发货。"
+                elif not 4 <= len(tracking) <= 80:
+                    note = "跟踪号长度不对。"
+                else:
+                    order["tracking"] = tracking
+                    order["status"] = "shipped"
+                    save_db(db)
+                    note = f"{code} 跟踪号已保存。"
+            elif action == "address" and order:
+                if order["status"] == "waiting_payment":
+                    note = "付款还没核验，不能写地址。"
+                else:
+                    error = validate_address(request.form.get("address") or "", order["warehouse"])
+                    if error:
+                        note = error
+                    else:
+                        order["address"] = request.form.get("address").strip()
+                        if order["status"] == "waiting_address":
+                            order["status"] = "paid"
+                        save_db(db)
+                        note = f"{code} 地址已保存。"
+            elif action == "create":
+                wh = request.form.get("warehouse", "us")
+                network = request.form.get("network", "ERC20")
+                key = request.form.get("product")
+                try:
+                    qty = int(request.form.get("qty") or 1)
+                except ValueError:
+                    qty = 1
+                product = product_by_key(key)
+                if not product or product["warehouse"] != wh or network not in PAY[wh]:
+                    note = "商品或仓库不对。"
+                else:
+                    unit = unit_price(product, qty)
+                    total = round(unit * qty, 2)
+                    amount, money = unique_amount(network, total, db["orders"])
+                    code = new_id(db["orders"])
+                    created = now()
+                    db["orders"][code] = {
+                        "id": code, "warehouse": wh, "network": network,
+                        "items": [{"key": key, "name": product["name"], "qty": qty, "unit": round(unit, 2), "line": total}],
+                        "total": total, "unique_amount": amount, "amount_unit": money,
+                        "pay_address": PAY[wh][network], "status": "waiting_payment",
+                        "txid": "", "verify_msg": "", "token": "", "address": "", "tracking": "",
+                        "created": created.isoformat(),
+                        "expires": (created + timedelta(minutes=LOCK_MINUTES)).isoformat(),
+                    }
+                    save_db(db)
+                    note = f"已开单 {code}，应付 {amount} {money}。把订单号发给客户。"
+                    notify(wh, f"后台开单 {code}\n应付 {amount} {money}")
+    orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)[:80]
+    cards = []
+    for order in orders:
+        goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
+        accept = ""
+        if order["status"] == "waiting_payment":
+            accept = f'<button name="action" value="accept">人工确认付款</button>'
+        cards.append(f"""
+        <div class="card">
+          <b>{order["id"]} · {order["warehouse"].upper()} · {order["status"]}</b>
+          <div class="muted">${order["total"]:.2f} · 应付 {order["unique_amount"]} {order["amount_unit"]} · {order["network"]}</div>
+          <div>{html.escape(goods)}</div>
+          <div class="small muted">交易号 {html.escape(order.get("txid") or "—")}</div>
+          <form method="post">
+            <input type="hidden" name="id" value="{order["id"]}">
+            <textarea name="address" placeholder="地址">{html.escape(order.get("address") or "")}</textarea>
+            <div class="row" style="margin-top:8px">
+              {accept}
+              <button name="action" value="address">保存地址</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <input name="tracking" value="{html.escape(order.get("tracking") or "")}" placeholder="跟踪号">
+              <button name="action" value="track">回传跟踪号</button>
+            </div>
+          </form>
+        </div>
+        """)
+    choices = "".join(
+        f'<option value="{html.escape(item["key"])}">{html.escape(item["warehouse"].upper())} · {html.escape(item["name"])}</option>'
+        for item in products()
+    )
+    note_html = f'<p class="good">{html.escape(note)}</p>' if note else ""
+    body = f"""
+    <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
+    <p class="muted">客户只在网页下单、交交易号、查单。跟踪号在这里回传。新订单、付款、地址会发到管理员电报。这个网站不会抢下单机器人的轮询。</p>
+    {note_html}
+    <div class="card"><b>添加订单</b>
+      <form method="post">
+        <input type="hidden" name="action" value="create">
+        <select name="warehouse">{''.join(f'<option value="{code}">{label}</option>' for code, label in WAREHOUSES)}</select>
+        <select name="product" style="margin-top:8px">{choices}</select>
+        <div class="row" style="margin-top:8px">
+          <input name="qty" type="number" min="1" max="50" value="1">
+          <select name="network"><option>ERC20</option><option>SOL</option><option>BTC</option></select>
+        </div>
+        <button style="width:100%;margin-top:8px">生成订单</button>
+      </form>
+    </div>
+    {''.join(cards)}
+    """
+    return page("后台", body)
+
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
