@@ -1035,7 +1035,7 @@ def desk():
 
                     
     all_orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)
-    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] != "shipped"][:40]
+    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid")][:40]
     done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"][:20]
     cards = []
     for order in pending:
