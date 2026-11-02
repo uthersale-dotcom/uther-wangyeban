@@ -1051,11 +1051,7 @@ def desk():
           <div class="small muted">交易号 {html.escape(order.get("txid") or "—")}</div>
           <form method="post">
             <input type="hidden" name="id" value="{order["id"]}">
-            <textarea name="address" placeholder="地址">{html.escape(order.get("address") or "")}</textarea>
-            <div class="row" style="margin-top:8px">
-              {accept}
-              <button name="action" value="address">保存地址</button>
-            </div>
+            {f'<textarea name="address" placeholder="地址">{html.escape(order.get("address") or "")}</textarea><div class="row" style="margin-top:8px">{accept}<button name="action" value="address">保存地址</button></div>' if order["status"] == "waiting_address" else ""}
             <div class="row" style="margin-top:8px">
               <input name="tracking" value="{html.escape(order.get("tracking") or "")}" placeholder="跟踪号">
               <button name="action" value="track">回传跟踪号</button>
