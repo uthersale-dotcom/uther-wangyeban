@@ -399,7 +399,19 @@ def notify(warehouse, text):
         except Exception:
             pass
 
-
+def btc_still_there(txid):
+    try:
+        r = requests.get(f"https://mempool.space/api/tx/{txid.lower()}", timeout=10)
+        if r.status_code == 404:
+            return False, "交易已消失，可能被替换"
+        if r.status_code == 200:
+            data = r.json()
+            confirmed = (data.get("status") or {}).get("confirmed", False)
+            return True, "已确认" if confirmed else "仍在内存池，未确认"
+    except Exception:
+        return False, "查询失败"
+    return False, "未知"
+  
 def verify_btc(txid, address, expected):
     if not re.fullmatch(r"[0-9a-fA-F]{64}", txid):
         return False, "Invalid BTC transaction id.", ""
@@ -800,6 +812,11 @@ def submit_txid(code):
         expected = float(order["unique_amount"])
         if order["network"] == "BTC":
             ok, message, token = verify_btc(txid.lower(), order["pay_address"], expected)
+            if ok and "waiting for confirmation" in message:
+                still, status = btc_still_there(txid)
+                if not still:
+                    ok = False
+                    message = "Bitcoin transaction disappeared (may have been replaced). Submit the new transaction id."
         elif order["network"] == "ERC20":
             ok, message, token = verify_erc20(txid.lower(), order["pay_address"], expected)
         else:
@@ -1015,6 +1032,17 @@ def desk():
                 tracking = (request.form.get("tracking") or "").strip()
                 if not order.get("address"):
                     note = "还没有地址，不能发货。"
+                elif order.get("network") == "BTC" and order.get("txid"):
+                    still, status = btc_still_there(order["txid"])
+                    if not still:
+                        note = f"比特币交易已消失（{status}），不要发货。让客户重新付款。"
+                    elif not 4 <= len(tracking) <= 80:
+                        note = "跟踪号长度不对。"
+                    else:
+                        order["tracking"] = tracking
+                        order["status"] = "shipped"
+                        save_db(db)
+                        note = f"{code} 跟踪号已保存。"
                 elif not 4 <= len(tracking) <= 80:
                     note = "跟踪号长度不对。"
                 else:
