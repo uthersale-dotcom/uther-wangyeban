@@ -29,6 +29,9 @@ import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import openpyxl
+from openpyxl.styles import Font, Alignment
+
 _rate = defaultdict(list)
 def rate_ok(ip, limit=10, window=60):
     now_ts = time.time()
@@ -1198,21 +1201,32 @@ threading.Thread(target=poll_staff, daemon=True).start()
 def desk_export():
     if not desk_ok():
         return redirect("/desk")
-    import csv
-    from io import StringIO
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Orders"
+    headers = ["订单号","仓库","状态","产品","应付","交易号","地址","跟踪号","创建时间"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
     db = load_db()
-    out = StringIO()
-    w = csv.writer(out)
-    w.writerow(["订单号","仓库","状态","产品","应付","交易号","地址","跟踪号","创建时间"])
     for order in sorted(db["orders"].values(), key=lambda x: x["created"], reverse=True):
         goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
-        w.writerow([
+        ws.append([
             order["id"], order["warehouse"].upper(), order["status"], goods,
             f'{order["unique_amount"]} {order["amount_unit"]}',
             order.get("txid") or "", order.get("address") or "",
             order.get("tracking") or "", order["created"][:19]
         ])
-    return out.getvalue(), 200, {"Content-Type": "text/csv", "Content-Disposition": "attachment; filename=orders.csv"}
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = 20
+    from io import BytesIO
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return out.getvalue(), 200, {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": "attachment; filename=orders.xlsx"
+    }
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
