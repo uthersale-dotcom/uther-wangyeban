@@ -610,9 +610,9 @@ def shop():
     try {{
       const ids=JSON.parse(localStorage.getItem(key)||"[]");
       if(Array.isArray(ids)&&ids.length){{
-    document.getElementById("recent").innerHTML=ids.slice(0,8).map(function(id){
-      return '<div class="card" style="display:flex;justify-content:space-between;align-items:center"><a href="/order/'+id+'">Continue order <b>'+id+'</b></a><button type="button" data-id="'+id+'" onclick="var k=\'uther-orders\';var a=JSON.parse(localStorage.getItem(k)||\'[]\').filter(function(x){return x!==this.getAttribute(\'data-id\')}.bind(this));localStorage.setItem(k,JSON.stringify(a));this.parentElement.remove()" style="background:none;border:0;color:#8c4a2f;font-size:20px;padding:0 8px">×</button></div>';
-    }).join("");
+    document.getElementById("recent").innerHTML=ids.slice(0,8).map(function(id){{
+      return '<div class="card" style="display:flex;justify-content:space-between;align-items:center"><a href="/order/'+id+'">Continue order <b>'+id+'</b></a><button type="button" data-id="'+id+'" onclick="var k=\'uther-orders\';var a=JSON.parse(localStorage.getItem(k)||\'[]\').filter(function(x){{return x!==this.getAttribute(\'data-id\')}}.bind(this));localStorage.setItem(k,JSON.stringify(a));this.parentElement.remove()" style="background:none;border:0;color:#8c4a2f;font-size:20px;padding:0 8px">×</button></div>';
+    }}).join("");
       }}
     }} catch(e) {{}}
     </script>
