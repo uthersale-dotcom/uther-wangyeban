@@ -836,10 +836,12 @@ def submit_address(code):
         save_db(db)
     items = "\n".join(f"{item['name']} × {item['qty']}" for item in order["items"])
     when = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M")
+    flags = {"us": "🇺🇸", "eu": "🇪🇺", "au": "🇦🇺", "ca": "🇨🇦", "uk": "🇬🇧"}
+    flag = flags.get(order["warehouse"], "")
     notify(order["warehouse"], (
         f"地址已提交 {code}\n"
         f"{when} (UTC+3)\n"
-        f"{order['warehouse'].upper()} · {order['network']}\n"
+        f"{flag} {order['warehouse'].upper()} · {order['network']}\n"
         f"应付 {order['unique_amount']} {order['amount_unit']}\n"
         f"交易号 {order.get('txid') or '人工确认'}\n"
         f"{items}\n\n"
@@ -1077,7 +1079,7 @@ def desk():
             accept = f'<button name="action" value="accept">人工确认付款</button>'
         cards.append(f"""
         <div class="card">
-          <b>{order["id"]} · {order["warehouse"].upper()} · {order["status"]}</b>
+          <b>{order["id"]} · {"🇺🇸" if order["warehouse"]=="us" else "🇪🇺" if order["warehouse"]=="eu" else "🇦🇺" if order["warehouse"]=="au" else "🇨🇦" if order["warehouse"]=="ca" else "🇬🇧"} {order["warehouse"].upper()} · {order["status"]}</b>
           <div class="muted">${order["total"]:.2f} · 应付 {order["unique_amount"]} {order["amount_unit"]} · {order["network"]}</div>
           <div>{html.escape(goods)}</div>
           <div class="small muted">交易号 {html.escape(order.get("txid") or "—")}</div>
@@ -1116,7 +1118,7 @@ def desk():
     {''.join(cards)}
     <div class="card"><b>已完成（已回传跟踪号）</b></div>
     {''.join(
-        f'''<div class="card"><b>{order["id"]} · shipped</b>
+        f'''<div class="card"><b>{order["id"]} · {"🇺🇸" if order["warehouse"]=="us" else "🇪🇺" if order["warehouse"]=="eu" else "🇦🇺" if order["warehouse"]=="au" else "🇨🇦" if order["warehouse"]=="ca" else "🇬🇧"} shipped</b>
         <div class="muted">交易号 {html.escape(order.get("txid") or "—")}</div>
         <div>{html.escape(", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"]))}</div>
         <div class="small">{html.escape(order.get("address") or "—")}</div>
