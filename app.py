@@ -614,13 +614,13 @@ def shop():
       </div>
       <button style="width:100%" id="paybtn">Pay</button>
       <script>
-      document.getElementById("paybtn").onclick=function(){
+      document.getElementById("paybtn").onclick=function(){{
         if(this.disabled) return false;
         this.disabled=true;
         this.innerText="Processing...";
         this.form.submit();
         return false;
-      };
+      }};
       </script>
     </form>
     <script>
