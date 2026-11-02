@@ -610,8 +610,8 @@ def shop():
     try {{
       const ids=JSON.parse(localStorage.getItem(key)||"[]");
       if(Array.isArray(ids)&&ids.length){{
-        document.getElementById("recent").innerHTML=ids.slice(0,8).map(id=>
-          '<a class="card" style="display:block" href="/order/'+id+'">Continue order <b>'+id+'</b></a>').join("");
+    document.getElementById("recent").innerHTML=ids.slice(0,8).map(id=>
+      '<div class="card" style="display:flex;justify-content:space-between;align-items:center"><a href="/order/'+id+'">Continue order <b>'+id+'</b></a><button type="button" onclick="event.preventDefault();const k=\'uther-orders\';const a=JSON.parse(localStorage.getItem(k)||\'[]\').filter(x=>x!==\''+id+'\');localStorage.setItem(k,JSON.stringify(a));this.parentElement.remove()" style="background:none;border:0;color:#8c4a2f;font-size:20px;padding:0 8px">×</button></div>').join("");
       }}
     }} catch(e) {{}}
     </script>
