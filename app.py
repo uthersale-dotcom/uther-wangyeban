@@ -1153,12 +1153,18 @@ def handle_staff(msg):
 
     if text.lower() in ("/pending", "/orders"):
         db = load_db()
-        rows = [
-            f'{row["id"]} · {row["warehouse"].upper()} · {row["status"]} · {row["unique_amount"]} {row["amount_unit"]}'
-            for row in sorted(db["orders"].values(), key=lambda x: x["created"], reverse=True)
-            if row["status"] in ("waiting_address", "paid") and row.get("address")
-        ][:30]
-        reply = "\n".join(rows) if rows else "没有待处理订单。"
+        flags = {"us": "🇺🇸", "eu": "🇪🇺", "au": "🇦🇺", "ca": "🇨🇦", "uk": "🇬🇧"}
+        lines = []
+        for wh, label in WAREHOUSES:
+            rows = [
+                f'{flags.get(wh,"")} {row["id"]} · {row["status"]} · {row["unique_amount"]} {row["amount_unit"]}'
+                for row in sorted(db["orders"].values(), key=lambda x: x["created"], reverse=True)
+                if row["warehouse"] == wh and row["status"] in ("waiting_address", "paid") and row.get("address")
+            ][:10]
+            if rows:
+                lines.append(f"{flags.get(wh,'')} {label}")
+                lines.extend(rows)
+        reply = "\n".join(lines) if lines else "没有待处理订单。"
         requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
             json={"chat_id": chat_id, "text": reply[:3900]},
