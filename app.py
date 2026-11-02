@@ -540,26 +540,26 @@ def window_open(order):
 STYLE = """
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#f4f7f4;color:#1c1915;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{margin:0;background:#f4f7f4;color:#1a2e1a;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 main{max-width:520px;margin:0 auto;padding:20px 16px 48px}
-a{color:#8c4a2f;text-decoration:none}
+a{color:#1e6b3a;text-decoration:none}
 h1{font-size:30px;margin:4px 0 16px}
 .top{display:flex;justify-content:space-between;align-items:end}
-.card{background:#fffdf8;border:1px solid #e4dccf;border-radius:16px;padding:14px;margin:0 0 12px}
+.card{background:#fff;border:1px solid #d5e0d5;border-radius:16px;padding:14px;margin:0 0 12px}
 .muted{color:#6f675c;font-size:14px}
 .row{display:flex;justify-content:space-between;gap:12px;align-items:center}
 .pills{display:flex;gap:8px;overflow:auto;margin-bottom:12px}
-.pills a{border:1px solid #e4dccf;background:#fffdf8;border-radius:999px;padding:8px 14px;color:#1c1915;white-space:nowrap;flex:0 0 auto}
+.pills a{border:1px solid #d5e0d5;background:#fff;border-radius:999px;padding:8px 14px;color:#1a2e1a;white-space:nowrap;flex:0 0 auto}
 .pills .on{background:#1e6b3a;color:#fff}
 input,textarea,select,button{font:inherit}
-input[type=text],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid #e4dccf;border-radius:12px;padding:12px;background:#fff}
+input[type=text],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid #d5e0d5;border-radius:12px;padding:12px;background:#fff}
 input[type=radio]{width:auto;margin:0}
 textarea{min-height:120px}
 button,.btn{border:0;border-radius:12px;background:#1e6b3a;color:#fff8f3;padding:12px 16px;font-weight:600}
 input.qty{width:72px}
 .nets{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-.nets label{display:flex;align-items:center;gap:10px;border:1px solid #e4dccf;background:#fffdf8;border-radius:12px;padding:12px 14px}
-.nets label:has(input:checked){background:#1e6b3a;color:#fff;border-color:#1c1915}
+.nets label{display:flex;align-items:center;gap:10px;border:1px solid #d5e0d5;background:#fff;border-radius:12px;padding:12px 14px}
+.nets label:has(input:checked){background:#1e6b3a;color:#fff;border-color:#1a2e1a}
 .bad{background:#f8e6e4;color:#8f2d2d;border-radius:12px;padding:12px}
 .good{background:#e7f4ec;color:#1f6b45;border-radius:12px;padding:12px}
 .warn{background:#f8efd8;color:#8a5a12;border-radius:12px;padding:12px}
@@ -644,7 +644,7 @@ try {{
   const ids=JSON.parse(localStorage.getItem(key)||"[]");
   if(Array.isArray(ids)&&ids.length){{
     document.getElementById("recent").innerHTML=ids.slice(0,8).map(function(id){{
-      return '<div class="card" style="display:flex;justify-content:space-between;align-items:center"><a href="/order/'+id+'">Continue order <b>'+id+'</b></a><button type="button" data-id="'+id+'" onclick="var k=\'uther-orders\';var a=JSON.parse(localStorage.getItem(k)||\'[]\').filter(function(x){{return x!==this.getAttribute(\'data-id\')}}.bind(this));localStorage.setItem(k,JSON.stringify(a));this.parentElement.remove()" style="background:none;border:0;color:#8c4a2f;font-size:20px;padding:0 8px">×</button></div>';
+      return '<div class="card" style="display:flex;justify-content:space-between;align-items:center"><a href="/order/'+id+'">Continue order <b>'+id+'</b></a><button type="button" data-id="'+id+'" onclick="var k=\'uther-orders\';var a=JSON.parse(localStorage.getItem(k)||\'[]\').filter(function(x){{return x!==this.getAttribute(\'data-id\')}}.bind(this));localStorage.setItem(k,JSON.stringify(a));this.parentElement.remove()" style="background:none;border:0;color:#1e6b3a;font-size:20px;padding:0 8px">×</button></div>';
     }}).join("");
   }}
 }} catch(e) {{}}
@@ -738,7 +738,7 @@ def order_body(order, error=""):
         <div class="card"><div class="small muted">Send exactly</div>
           <div style="font-size:24px">{order["unique_amount"]} {order["amount_unit"]}</div>
           <div class="small muted" style="margin-top:10px">{order["network"]}</div>
-          <div id="payaddr" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;background:#fff;border:1px solid #e4dccf;border-radius:12px;padding:12px;margin-top:8px">{html.escape(order["pay_address"])}</div>
+          <div id="payaddr" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;background:#fff;border:1px solid #d5e0d5;border-radius:12px;padding:12px;margin-top:8px">{html.escape(order["pay_address"])}</div>
           <button type="button" style="width:100%;margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('payaddr').textContent);this.textContent='Copied'">Copy address</button>
         </div>
         <form method="post" action="/order/{order["id"]}/txid">
@@ -1204,7 +1204,32 @@ def handle_staff(msg):
             timeout=12,
         )
         return
-        
+
+    if text.lower().startswith("/accept"):
+        parts = text.split()
+        if len(parts) < 2:
+            reply = "用法：/accept 订单号"
+        else:
+            code = parts[1].upper()
+            with _lock:
+                db = load_db()
+                order = db["orders"].get(code)
+                if not order:
+                    reply = "订单不存在。"
+                elif order["status"] != "waiting_payment":
+                    reply = f"{code} 不是待付款状态。"
+                else:
+                    order["status"] = "waiting_address"
+                    order["verify_msg"] = "Accepted by staff"
+                    save_db(db)
+                    reply = f"{code} 已人工确认，客户可以填地址。"
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": reply},
+            timeout=12,
+        )
+        return
+
     if text.lower().startswith("/track"):
         parts = text.split(maxsplit=2)
         reply = save_tracking(parts[1], parts[2]) if len(parts) >= 3 else "用法：/track 订单号 跟踪号"
