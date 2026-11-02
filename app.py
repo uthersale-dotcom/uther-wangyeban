@@ -27,7 +27,16 @@ import re
 import string
 import threading
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+_rate = defaultdict(list)
+def rate_ok(ip, limit=10, window=60):
+    now_ts = time.time()
+    _rate[ip] = [t for t in _rate[ip] if now_ts - t < window]
+    if len(_rate[ip]) >= limit:
+        return False
+    _rate[ip].append(now_ts)
+    return True
 from pathlib import Path
 
 import requests
@@ -756,6 +765,8 @@ def order_page(code):
 
 @app.post("/order/<code>/txid")
 def submit_txid(code):
+    if not rate_ok(request.remote_addr or "0"):
+        return page(code, '<p class="bad">Too many attempts. Wait a minute.</p>'), 429
     code = code.upper()
     txid = re.sub(r"\s+", "", request.form.get("txid") or "")
     with _lock:
@@ -793,6 +804,8 @@ def submit_txid(code):
 
 @app.post("/order/<code>/address")
 def submit_address(code):
+    if not rate_ok(request.remote_addr or "0"):
+        return page(code, '<p class="bad">Too many attempts. Wait a minute.</p>'), 429
     code = code.upper()
     address = (request.form.get("address") or "").strip()
     with _lock:
