@@ -1095,7 +1095,7 @@ def desk():
     body = f"""
     <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
     <p class="muted">回传跟踪号。新订单、付款、地址会发到管理员电报。</p>
-    <div class="pills"><a href="/desk">待处理</a><a href="/desk?done=1">已完成</a><a href="/desk/products">商品</a><a href="/desk/export">导出CSV</a></div>
+    <div class="pills"><a href="/desk?wh={wh_filter}">待处理</a><a href="/desk?wh={wh_filter}&done=1">已完成</a><a href="/desk/products">商品</a><a href="/desk/export">导出CSV</a></div>
     {note_html}
     <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
      <div class="card"><b>添加订单</b>
