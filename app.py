@@ -745,10 +745,6 @@ def order_body(order, error=""):
           <button style="width:100%;margin-top:8px">Save address</button>
         </form>
         """
-            goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
-            addr = f'<p class="small">{html.escape(order.get("address") or "")}</p>' if order.get("address") else ""
-            goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
-            addr = f'<p class="small">{html.escape(order.get("address") or "")}</p>' if order.get("address") else ""
             tracking = f'<p><b>{html.escape(order["tracking"])}</b></p>' if order.get("tracking") else ""
     label = "Shipped" if order["status"] == "shipped" else "Address received"
     return head + f"""
@@ -869,7 +865,7 @@ def track():
             tracking = f'<p><b>{html.escape(order["tracking"])}</b></p>' if order.get("tracking") else ""
             cont = ""
             if order["status"] in ("waiting_payment", "waiting_address"):
-                cont = f'<p><a href="/order/{code}">Continue this order</a></p>'
+            cont = f'<p><a href="/order/{code}">Continue this order</a></p>'
             goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
             addr = f'<p class="small">{html.escape(order.get("address") or "")}</p>' if order.get("address") else ""
             result = f'<div class="card"><div class="small muted">{code}</div><h2>{label}</h2><div>{html.escape(goods)}</div>{addr}{tracking}{cont}</div>'
