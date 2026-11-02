@@ -539,32 +539,30 @@ def window_open(order):
 
 STYLE = """
 <style>
-STYLE = """
-<style>
 *{box-sizing:border-box}
-body{margin:0;background:#f4f7f4;color:#1a2e1a;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
-main{max-width:480px;margin:0 auto;padding:16px 16px 64px}
-a{color:#1e6b3a;text-decoration:none}
-h1{font-size:26px;margin:8px 0 16px;font-weight:650;letter-spacing:-0.3px}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.card{background:#fff;border:1px solid #e3ebe3;border-radius:18px;padding:16px;margin:0 0 14px;box-shadow:0 1px 2px rgba(20,40,20,.04)}
-.muted{color:#5c6b5c;font-size:14px}
+body{margin:0;background:#f3efe6;color:#1c1915;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:20px 16px 48px}
+a{color:#8c4a2f;text-decoration:none}
+h1{font-size:30px;margin:4px 0 16px}
+.top{display:flex;justify-content:space-between;align-items:end}
+.card{background:#fffdf8;border:1px solid #e4dccf;border-radius:16px;padding:14px;margin:0 0 12px}
+.muted{color:#6f675c;font-size:14px}
 .row{display:flex;justify-content:space-between;gap:12px;align-items:center}
-.pills{display:flex;gap:8px;overflow:auto;margin-bottom:14px;padding-bottom:2px}
-.pills a{border:1px solid #d5e0d5;background:#fff;border-radius:999px;padding:10px 16px;color:#1a2e1a;white-space:nowrap;flex:0 0 auto;font-size:15px}
-.pills .on{background:#1e6b3a;color:#fff;border-color:#1e6b3a}
+.pills{display:flex;gap:8px;overflow:auto;margin-bottom:12px}
+.pills a{border:1px solid #e4dccf;background:#fffdf8;border-radius:999px;padding:8px 14px;color:#1c1915;white-space:nowrap;flex:0 0 auto}
+.pills .on{background:#1c1915;color:#f3efe6}
 input,textarea,select,button{font:inherit}
-input[type=text],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid #d5e0d5;border-radius:14px;padding:14px;background:#fff;font-size:16px}
+input[type=text],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid #e4dccf;border-radius:12px;padding:12px;background:#fff}
 input[type=radio]{width:auto;margin:0}
-textarea{min-height:110px}
-button,.btn{border:0;border-radius:14px;background:#1e6b3a;color:#fff;padding:14px 18px;font-weight:600;font-size:16px}
-input.qty{width:76px}
-.nets{display:flex;flex-direction:column;gap:10px;margin-top:10px}
-.nets label{display:flex;align-items:center;gap:12px;border:1px solid #d5e0d5;background:#fff;border-radius:14px;padding:14px 16px}
-.nets label:has(input:checked){background:#1e6b3a;color:#fff;border-color:#1e6b3a}
-.bad{background:#fdecea;color:#9b2c2c;border-radius:14px;padding:14px}
-.good{background:#e8f6ee;color:#1a6b3c;border-radius:14px;padding:14px}
-.warn{background:#fbf6e8;color:#8a6a20;border-radius:14px;padding:14px}
+textarea{min-height:120px}
+button,.btn{border:0;border-radius:12px;background:#8c4a2f;color:#fff8f3;padding:12px 16px;font-weight:600}
+input.qty{width:72px}
+.nets{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.nets label{display:flex;align-items:center;gap:10px;border:1px solid #e4dccf;background:#fffdf8;border-radius:12px;padding:12px 14px}
+.nets label:has(input:checked){background:#1c1915;color:#f3efe6;border-color:#1c1915}
+.bad{background:#f8e6e4;color:#8f2d2d;border-radius:12px;padding:12px}
+.good{background:#e7f4ec;color:#1f6b45;border-radius:12px;padding:12px}
+.warn{background:#f8efd8;color:#8a5a12;border-radius:12px;padding:12px}
 code,input.copy{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
 .small{font-size:13px}
 </style>
