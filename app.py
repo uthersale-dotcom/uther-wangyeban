@@ -612,7 +612,7 @@ def shop():
           <label><input type="radio" name="network" value="BTC"><span>Bitcoin</span></label>
         </div>
       </div>
-      <button style="width:100%">Pay</button>
+      <button style="width:100%" onclick="this.disabled=true;this.form.submit()">Pay</button>
     </form>
     <script>
 const key="uther-orders";
@@ -631,6 +631,8 @@ try {{
 
 @app.post("/checkout")
 def checkout():
+    if request.form.get("submitted"):
+        return redirect("/")
     wh = request.form.get("warehouse", "us")
     network = request.form.get("network", "ERC20")
     if wh not in PAY or network not in ("BTC", "ERC20", "SOL"):
