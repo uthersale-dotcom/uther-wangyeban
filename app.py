@@ -1062,7 +1062,7 @@ def desk():
                     
     all_orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)
     show_done = request.args.get("done") == "1"
-    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid")][:40]
+    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid") and row.get("address")][:40]
     done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"][:20]
     if show_done:
         pending = []
