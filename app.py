@@ -612,7 +612,16 @@ def shop():
           <label><input type="radio" name="network" value="BTC"><span>Bitcoin</span></label>
         </div>
       </div>
-      <button style="width:100%" onclick="this.disabled=true;this.form.submit()">Pay</button>
+      <button style="width:100%" id="paybtn">Pay</button>
+      <script>
+      document.getElementById("paybtn").onclick=function(){
+        if(this.disabled) return false;
+        this.disabled=true;
+        this.innerText="Processing...";
+        this.form.submit();
+        return false;
+      };
+      </script>
     </form>
     <script>
 const key="uther-orders";
