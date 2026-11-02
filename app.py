@@ -880,6 +880,9 @@ def desk():
     if request.method == "POST" and request.form.get("action") == "logout":
         session.pop("desk", None)
         return redirect("/desk")
+    wh_filter = request.args.get("wh", "us")
+    if wh_filter not in PAY:
+        wh_filter = "us"
     if not desk_ok():
         return page("后台", """
         <h1>后台</h1>
@@ -1042,15 +1045,13 @@ def desk():
         <button style="width:100%;margin-top:8px">保存商品</button>
       </form>
     </div>
+    <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
     {''.join(
-        f'''<div class="card"><b>{label}</b></div>''' + ''.join(
-            f'''<div class="card"><b>{html.escape(item["key"])}</b>
-            <div>{html.escape(item["name"])}</div>
-            <div class="muted">{html.escape(tier_label(item))} · 库存 {item.get("stock", "不限")}</div>
-            <form method="post"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="key" value="{html.escape(item["key"])}"><button>删除</button></form></div>'''
-            for item in products() if item["warehouse"] == code
-        )
-        for code, label in WAREHOUSES
+        f'''<div class="card"><b>{html.escape(item["key"])}</b>
+        <div>{html.escape(item["name"])}</div>
+        <div class="muted">{html.escape(tier_label(item))} · 库存 {item.get("stock", "不限")}</div>
+        <form method="post"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="key" value="{html.escape(item["key"])}"><button>删除</button></form></div>'''
+        for item in products() if item["warehouse"] == wh_filter
     )}
      <div class="card"><b>添加订单</b>
       <form method="post">
