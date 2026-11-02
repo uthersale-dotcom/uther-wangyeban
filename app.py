@@ -701,7 +701,9 @@ def order_body(order, error=""):
         <div class="card"><div class="small muted">Send exactly</div>
           <div style="font-size:24px">{order["unique_amount"]} {order["amount_unit"]}</div>
           <div class="small muted" style="margin-top:10px">{order["network"]}</div>
-          <input class="copy" readonly value="{html.escape(order["pay_address"])}"></div>
+          <div id="payaddr" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;background:#fff;border:1px solid #e4dccf;border-radius:12px;padding:12px;margin-top:8px">{html.escape(order["pay_address"])}</div>
+          <button type="button" style="width:100%;margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('payaddr').textContent);this.textContent='Copied'">Copy address</button>
+        </div>
         <form method="post" action="/order/{order["id"]}/txid">
           <textarea name="txid" placeholder="Paste the transaction id"></textarea>
           <button style="width:100%;margin-top:8px">Submit transaction id</button>
