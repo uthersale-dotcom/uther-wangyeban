@@ -26,6 +26,7 @@ import random
 import re
 import string
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -35,7 +36,7 @@ from flask import Flask, redirect, render_template_string, request, session, url
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "uther-web-order-desk")
 
-BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN") or "8971402213:AAGXCBnUIc8ublqSzcGZJAoaBBzDYQ97rkM").strip()
+BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN") or "8501248532:AAG_dJrb3hETUlMZ3v7NQlkh2lH9tHX-C88").strip()
 DESK_KEY = os.environ.get("DESK_KEY", "desk-uther").strip()
 US_ADMINS = [5922115358, 8329090358]
 INTL_ADMINS = [5922115358, 8329090358, 8615921011]
@@ -806,7 +807,18 @@ def submit_address(code):
         order["address"] = address
         order["status"] = "paid"
         save_db(db)
-    notify(order["warehouse"], f"地址已提交 {code}\n{order['warehouse'].upper()} · {order['network']}\n{address}\n\n到网站 /desk 回传跟踪号。")
+    items = "\n".join(f"{item['name']} × {item['qty']}" for item in order["items"])
+    when = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M")
+    notify(order["warehouse"], (
+        f"地址已提交 {code}\n"
+        f"{when} (UTC+3)\n"
+        f"{order['warehouse'].upper()} · {order['network']}\n"
+        f"应付 {order['unique_amount']} {order['amount_unit']}\n"
+        f"交易号 {order.get('txid') or '人工确认'}\n"
+        f"{items}\n\n"
+        f"{address}\n\n"
+        f"回复这条消息发跟踪号，或到网站 /desk 回传。"
+    ))
     return redirect(url_for("order_page", code=code))
 
 
@@ -841,6 +853,18 @@ def track():
     """
     return page("Track", body)
 
+def save_products(items):
+    raw = {}
+    for item in items:
+        row = {
+            "name": item["name"],
+            "warehouse": item["warehouse"],
+            "price_tiers": {str(k): float(v) for k, v in item["tiers"].items()},
+        }
+        if item.get("stock") not in (None, ""):
+            row["stock"] = int(item["stock"])
+        raw[item["key"]] = row
+    (DATA / "products.json").write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def desk_ok():
     return session.get("desk") == DESK_KEY
@@ -930,6 +954,44 @@ def desk():
                     save_db(db)
                     note = f"已开单 {code}，应付 {amount} {money}。把订单号发给客户。"
                     notify(wh, f"后台开单 {code}\n应付 {amount} {money}")
+
+            elif action == "save_product":
+                key = (request.form.get("key") or "").strip()
+                name = (request.form.get("name") or "").strip()
+                wh = request.form.get("warehouse", "us")
+                try:
+                    p1 = float(request.form.get("p1") or 0)
+                    p2 = float(request.form.get("p2") or p1)
+                    p3 = float(request.form.get("p3") or p2)
+                except ValueError:
+                    p1 = p2 = p3 = 0
+                stock_raw = (request.form.get("stock") or "").strip()
+                if not key or not name or wh not in PAY or p1 <= 0:
+                    note = "商品编号、名称、仓库、1件价格必填。"
+                else:
+                    items = products()
+                    found = False
+                    for item in items:
+                        if item["key"] == key:
+                            item.update({"name": name, "warehouse": wh, "tiers": {"1": p1, "2": p2, "3": p3}})
+                            if stock_raw:
+                                item["stock"] = int(stock_raw)
+                            else:
+                                item.pop("stock", None)
+                            found = True
+                    if not found:
+                        row = {"key": key, "name": name, "warehouse": wh, "tiers": {"1": p1, "2": p2, "3": p3}}
+                        if stock_raw:
+                            row["stock"] = int(stock_raw)
+                        items.append(row)
+                    save_products(items)
+                    note = f"商品 {key} 已保存。"
+            elif action == "delete_product":
+                key = (request.form.get("key") or "").strip()
+                items = [item for item in products() if item["key"] != key]
+                save_products(items)
+                note = f"商品 {key} 已删除。"
+                    
     orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)[:80]
     cards = []
     for order in orders:
@@ -966,7 +1028,30 @@ def desk():
     <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
     <p class="muted">客户只在网页下单、交交易号、查单。跟踪号在这里回传。新订单、付款、地址会发到管理员电报。这个网站不会抢下单机器人的轮询。</p>
     {note_html}
-    <div class="card"><b>添加订单</b>
+    <div class="card"><b>商品目录</b>
+      <p class="muted">改完立刻生效。库存留空表示不限。填 0 表示售罄。</p>
+      <form method="post">
+        <input type="hidden" name="action" value="save_product">
+        <input name="key" placeholder="编号，例如 re60">
+        <input name="name" placeholder="商品名" style="margin-top:8px">
+        <select name="warehouse" style="margin-top:8px">{''.join(f'<option value="{code}">{label}</option>' for code, label in WAREHOUSES)}</select>
+        <div class="row" style="margin-top:8px">
+          <input name="p1" placeholder="1件价">
+          <input name="p2" placeholder="2件价">
+          <input name="p3" placeholder="3件价">
+        </div>
+        <input name="stock" placeholder="库存，可空" style="margin-top:8px">
+        <button style="width:100%;margin-top:8px">保存商品</button>
+      </form>
+    </div>
+    {''.join(
+        f'''<div class="card"><b>{html.escape(item["key"])}</b> · {html.escape(item["warehouse"].upper())}
+        <div>{html.escape(item["name"])}</div>
+        <div class="muted">{html.escape(tier_label(item))} · 库存 {item.get("stock", "不限")}</div>
+        <form method="post"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="key" value="{html.escape(item["key"])}"><button>删除</button></form></div>'''
+        for item in products()
+    )}
+     <div class="card"><b>添加订单</b>
       <form method="post">
         <input type="hidden" name="action" value="create">
         <select name="warehouse">{''.join(f'<option value="{code}">{label}</option>' for code, label in WAREHOUSES)}</select>
@@ -982,6 +1067,60 @@ def desk():
     """
     return page("后台", body)
 
+def save_tracking(code, tracking):
+    tracking = tracking.strip()
+    if not 4 <= len(tracking) <= 80:
+        return "跟踪号长度不对。"
+    with _lock:
+        db = load_db()
+        order = db["orders"].get(code.upper())
+        if not order:
+            return "订单不存在。"
+        if not order.get("address"):
+            return "还没有地址，不能发货。"
+        order["tracking"] = tracking
+        order["status"] = "shipped"
+        save_db(db)
+    return f"{code.upper()} 跟踪号已保存：{tracking}"
+
+
+def handle_staff(msg):
+    text = (msg.get("text") or "").strip()
+    chat_id = (msg.get("chat") or {}).get("id")
+    if not text or chat_id not in set(US_ADMINS + INTL_ADMINS):
+        return
+    if text.lower().startswith("/track"):
+        parts = text.split(maxsplit=2)
+        reply = save_tracking(parts[1], parts[2]) if len(parts) >= 3 else "用法：/track 订单号 跟踪号"
+    else:
+        replied = (msg.get("reply_to_message") or {}).get("text") or ""
+        found = re.search(r"\b(U[A-Z0-9]{7})\b", replied)
+        reply = save_tracking(found.group(1), text) if found else ""
+    if reply:
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": reply},
+            timeout=12,
+        )
+
+
+def poll_staff():
+    offset = 0
+    while True:
+        try:
+            data = requests.get(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates",
+                params={"timeout": 25, "offset": offset, "allowed_updates": '["message"]'},
+                timeout=30,
+            ).json()
+            for upd in data.get("result") or []:
+                offset = upd["update_id"] + 1
+                handle_staff(upd.get("message") or {})
+        except Exception:
+            time.sleep(3)
+
+
+threading.Thread(target=poll_staff, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
