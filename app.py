@@ -817,7 +817,7 @@ def submit_address(code):
         f"交易号 {order.get('txid') or '人工确认'}\n"
         f"{items}\n\n"
         f"{address}\n\n"
-        f"回复这条消息发跟踪号，或到网站 /desk 回传。"
+        f"回复这条消息发跟踪号，或到网站 /desk 回传。发货时请录制开箱视频。"
     ))
     return redirect(url_for("order_page", code=code))
 
@@ -844,7 +844,7 @@ def track():
             result = f'<div class="card"><div class="small muted">{code}</div><h2>{label}</h2>{tracking}{cont}</div>'
     body = f"""
     <a href="/">Shop</a><h1>Track</h1>
-    <p class="muted">The order code brings you back. Before payment is checked, you return to the transaction id. After it is checked, you return to the address form. After shipping, the tracking number shows here.</p>
+    <p class="muted">The order code brings you back. Before payment is checked, you return to the transaction id. After it is checked, you return to the address form. After shipping, the tracking number shows here. Keep your order code to check status anytime.</p>
     <form class="row">
       <input name="id" value="{html.escape(code)}" placeholder="Uxxxxxxx" style="text-transform:uppercase">
       <button>Check</button>
@@ -995,9 +995,11 @@ def desk():
                 save_products(items)
                 note = f"商品 {key} 已删除。"
                     
-    orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)[:80]
+    all_orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)
+    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] != "shipped"][:40]
+    done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"][:20]
     cards = []
-    for order in orders:
+    for order in pending:
         goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
         accept = ""
         if order["status"] == "waiting_payment":
@@ -1066,6 +1068,13 @@ def desk():
       </form>
     </div>
     {''.join(cards)}
+    <div class="card"><b>已完成（已回传跟踪号）</b></div>
+    {''.join(
+        f'''<div class="card"><b>{order["id"]} · {order["status"]}</b>
+        <div class="muted">{html.escape(", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"]))}</div>
+        <div>跟踪号 {html.escape(order.get("tracking") or "—")}</div></div>'''
+        for order in done
+    )}
     """
     return page("后台", body)
 
