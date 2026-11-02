@@ -1035,21 +1035,22 @@ def desk():
         <input name="key" placeholder="编号，例如 re60">
         <input name="name" placeholder="商品名" style="margin-top:8px">
         <select name="warehouse" style="margin-top:8px">{''.join(f'<option value="{code}">{label}</option>' for code, label in WAREHOUSES)}</select>
-        <div class="row" style="margin-top:8px">
-          <input name="p1" placeholder="1件价">
-          <input name="p2" placeholder="2件价">
-          <input name="p3" placeholder="3件价">
-        </div>
+        <input name="p1" placeholder="1件价" style="margin-top:8px">
+        <input name="p2" placeholder="2件价" style="margin-top:8px">
+        <input name="p3" placeholder="3件价" style="margin-top:8px">
         <input name="stock" placeholder="库存，可空" style="margin-top:8px">
         <button style="width:100%;margin-top:8px">保存商品</button>
       </form>
     </div>
     {''.join(
-        f'''<div class="card"><b>{html.escape(item["key"])}</b> · {html.escape(item["warehouse"].upper())}
-        <div>{html.escape(item["name"])}</div>
-        <div class="muted">{html.escape(tier_label(item))} · 库存 {item.get("stock", "不限")}</div>
-        <form method="post"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="key" value="{html.escape(item["key"])}"><button>删除</button></form></div>'''
-        for item in products()
+        f'''<div class="card"><b>{label}</b></div>''' + ''.join(
+            f'''<div class="card"><b>{html.escape(item["key"])}</b>
+            <div>{html.escape(item["name"])}</div>
+            <div class="muted">{html.escape(tier_label(item))} · 库存 {item.get("stock", "不限")}</div>
+            <form method="post"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="key" value="{html.escape(item["key"])}"><button>删除</button></form></div>'''
+            for item in products() if item["warehouse"] == code
+        )
+        for code, label in WAREHOUSES
     )}
      <div class="card"><b>添加订单</b>
       <form method="post">
