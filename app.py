@@ -866,6 +866,81 @@ def save_products(items):
         raw[item["key"]] = row
     (DATA / "products.json").write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
+@app.route("/desk/products", methods=["GET", "POST"])
+def desk_products():
+    if not desk_ok():
+        return redirect("/desk")
+    note = ""
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "save_product":
+            key = (request.form.get("key") or "").strip()
+            name = (request.form.get("name") or "").strip()
+            wh = request.form.get("warehouse", "us")
+            try:
+                p1 = float(request.form.get("p1") or 0)
+                p2 = float(request.form.get("p2") or p1)
+                p3 = float(request.form.get("p3") or p2)
+            except ValueError:
+                p1 = p2 = p3 = 0
+            stock_raw = (request.form.get("stock") or "").strip()
+            if not key or not name or wh not in PAY or p1 <= 0:
+                note = "商品编号、名称、仓库、1件价格必填。"
+            else:
+                items = products()
+                found = False
+                for item in items:
+                    if item["key"] == key:
+                        item.update({"name": name, "warehouse": wh, "tiers": {"1": p1, "2": p2, "3": p3}})
+                        if stock_raw:
+                            item["stock"] = int(stock_raw)
+                        else:
+                            item.pop("stock", None)
+                        found = True
+                if not found:
+                    row = {"key": key, "name": name, "warehouse": wh, "tiers": {"1": p1, "2": p2, "3": p3}}
+                    if stock_raw:
+                        row["stock"] = int(stock_raw)
+                    items.append(row)
+                save_products(items)
+                note = f"商品 {key} 已保存。"
+        elif action == "delete_product":
+            key = (request.form.get("key") or "").strip()
+            items = [item for item in products() if item["key"] != key]
+            save_products(items)
+            note = f"商品 {key} 已删除。"
+    wh_filter = request.args.get("wh", "us")
+    if wh_filter not in PAY:
+        wh_filter = "us"
+    note_html = f'<p class="good">{html.escape(note)}</p>' if note else ""
+    body = f"""
+    <div class="top"><h1>商品</h1><a href="/desk">返回订单</a></div>
+    <div class="pills"><a href="/desk">订单</a><a class="on" href="/desk/products">商品</a></div>
+    {note_html}
+    <div class="card"><b>添加商品</b>
+      <form method="post">
+        <input type="hidden" name="action" value="save_product">
+        <input name="key" placeholder="编号，例如 re60">
+        <input name="name" placeholder="商品名" style="margin-top:8px">
+        <select name="warehouse" style="margin-top:8px">{''.join(f'<option value="{code}">{label}</option>' for code, label in WAREHOUSES)}</select>
+        <input name="p1" placeholder="1件价" style="margin-top:8px">
+        <input name="p2" placeholder="2件价" style="margin-top:8px">
+        <input name="p3" placeholder="3件价" style="margin-top:8px">
+        <input name="stock" placeholder="库存，可空" style="margin-top:8px">
+        <button style="width:100%;margin-top:8px">保存商品</button>
+      </form>
+    </div>
+    <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk/products?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
+    {''.join(
+        f'''<div class="card"><b>{html.escape(item["key"])}</b>
+        <div>{html.escape(item["name"])}</div>
+        <div class="muted">{html.escape(tier_label(item))} · 库存 {item.get("stock", "不限")}</div>
+        <form method="post"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="key" value="{html.escape(item["key"])}"><button>删除</button></form></div>'''
+        for item in products() if item["warehouse"] == wh_filter
+    )}
+    """
+    return page("商品", body)
+
 def desk_ok():
     return session.get("desk") == DESK_KEY
 
@@ -958,42 +1033,6 @@ def desk():
                     note = f"已开单 {code}，应付 {amount} {money}。把订单号发给客户。"
                     notify(wh, f"后台开单 {code}\n应付 {amount} {money}")
 
-            elif action == "save_product":
-                key = (request.form.get("key") or "").strip()
-                name = (request.form.get("name") or "").strip()
-                wh = request.form.get("warehouse", "us")
-                try:
-                    p1 = float(request.form.get("p1") or 0)
-                    p2 = float(request.form.get("p2") or p1)
-                    p3 = float(request.form.get("p3") or p2)
-                except ValueError:
-                    p1 = p2 = p3 = 0
-                stock_raw = (request.form.get("stock") or "").strip()
-                if not key or not name or wh not in PAY or p1 <= 0:
-                    note = "商品编号、名称、仓库、1件价格必填。"
-                else:
-                    items = products()
-                    found = False
-                    for item in items:
-                        if item["key"] == key:
-                            item.update({"name": name, "warehouse": wh, "tiers": {"1": p1, "2": p2, "3": p3}})
-                            if stock_raw:
-                                item["stock"] = int(stock_raw)
-                            else:
-                                item.pop("stock", None)
-                            found = True
-                    if not found:
-                        row = {"key": key, "name": name, "warehouse": wh, "tiers": {"1": p1, "2": p2, "3": p3}}
-                        if stock_raw:
-                            row["stock"] = int(stock_raw)
-                        items.append(row)
-                    save_products(items)
-                    note = f"商品 {key} 已保存。"
-            elif action == "delete_product":
-                key = (request.form.get("key") or "").strip()
-                items = [item for item in products() if item["key"] != key]
-                save_products(items)
-                note = f"商品 {key} 已删除。"
                     
     all_orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)
     pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] != "shipped"][:40]
@@ -1031,30 +1070,10 @@ def desk():
     note_html = f'<p class="good">{html.escape(note)}</p>' if note else ""
     body = f"""
     <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
-    <p class="muted">客户只在网页下单、交交易号、查单。跟踪号在这里回传。新订单、付款、地址会发到管理员电报。这个网站不会抢下单机器人的轮询。</p>
+    <p class="muted">回传跟踪号。新订单、付款、地址会发到管理员电报。</p>
+    <div class="pills"><a href="/desk">订单</a><a href="/desk/products">商品</a></div>
     {note_html}
-    <div class="card"><b>商品目录</b>
-      <p class="muted">改完立刻生效。库存留空表示不限。填 0 表示售罄。</p>
-      <form method="post">
-        <input type="hidden" name="action" value="save_product">
-        <input name="key" placeholder="编号，例如 re60">
-        <input name="name" placeholder="商品名" style="margin-top:8px">
-        <select name="warehouse" style="margin-top:8px">{''.join(f'<option value="{code}">{label}</option>' for code, label in WAREHOUSES)}</select>
-        <input name="p1" placeholder="1件价" style="margin-top:8px">
-        <input name="p2" placeholder="2件价" style="margin-top:8px">
-        <input name="p3" placeholder="3件价" style="margin-top:8px">
-        <input name="stock" placeholder="库存，可空" style="margin-top:8px">
-        <button style="width:100%;margin-top:8px">保存商品</button>
-      </form>
-    </div>
     <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
-    {''.join(
-        f'''<div class="card"><b>{html.escape(item["key"])}</b>
-        <div>{html.escape(item["name"])}</div>
-        <div class="muted">{html.escape(tier_label(item))} · 库存 {item.get("stock", "不限")}</div>
-        <form method="post"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="key" value="{html.escape(item["key"])}"><button>删除</button></form></div>'''
-        for item in products() if item["warehouse"] == wh_filter
-    )}
      <div class="card"><b>添加订单</b>
       <form method="post">
         <input type="hidden" name="action" value="create">
