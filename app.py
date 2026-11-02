@@ -1156,7 +1156,7 @@ def handle_staff(msg):
         rows = [
             f'{row["id"]} · {row["warehouse"].upper()} · {row["status"]} · {row["unique_amount"]} {row["amount_unit"]}'
             for row in sorted(db["orders"].values(), key=lambda x: x["created"], reverse=True)
-            if row["status"] in ("waiting_payment", "waiting_address", "paid")
+            if row["status"] in ("waiting_address", "paid") and row.get("address")
         ][:30]
         reply = "\n".join(rows) if rows else "没有待处理订单。"
         requests.post(
