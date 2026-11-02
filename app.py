@@ -70,14 +70,16 @@ def load_products():
     if pfile.exists():
         try:
             data = json.loads(pfile.read_text(encoding="utf-8"))
-            # 兼容原机器人格式
             out = {}
             for k, v in data.items():
-                price = list(v.get("price_tiers", {1: 0}).values())[0] if v.get("price_tiers") else v.get("price", 0)
+                tiers = v.get("price_tiers") or {"1": v.get("price", 0)}
+                # 确保键是字符串
+                tiers = {str(tk): float(tv) for tk, tv in tiers.items()}
                 out[k] = {
                     "name": v.get("name", k),
-                    "price": float(price),
+                    "price_tiers": tiers,
                     "warehouse": v.get("warehouse", "us"),
+                    "stock": v.get("stock"),
                 }
             return out
         except Exception as e:
@@ -130,8 +132,9 @@ textarea { min-height: 80px; resize: vertical; }
 .product { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
 .product:last-child { border-bottom: none; }
 .product .info { flex: 1; }
-.product .name { font-weight: 500; }
-.product .price { color: #0071e3; font-size: 14px; }
+.product .name { font-weight: 500; font-size: 14px; }
+.product .tiers { color: #0071e3; font-size: 12px; margin-top: 2px; }
+.product .stock { color: #888; font-size: 11px; }
 .qty { display: flex; align-items: center; gap: 8px; }
 .qty button { width: 32px; height: 32px; border: 1px solid #ddd; background: #f5f5f7; border-radius: 6px; font-size: 18px; cursor: pointer; }
 .qty span { min-width: 24px; text-align: center; }
@@ -212,18 +215,24 @@ function filterProducts() {
   box.innerHTML = '';
   cart = {};
   for (const [k, p] of Object.entries(PRODUCTS)) {
-    if (p.warehouse && p.warehouse !== wh && wh !== 'us') continue;
+    if (p.warehouse && p.warehouse !== wh) continue;
+    const tiers = p.price_tiers || {"1": p.price || 0};
+    const p1 = tiers["1"] || tiers["1.0"] || Object.values(tiers)[0];
+    const p2 = tiers["2"] || tiers["2.0"] || p1;
+    const p3 = tiers["3"] || tiers["3.0"] || p2;
+    const stockText = (p.stock === 0) ? '<div class="stock">Sold out</div>' : (p.stock != null ? `<div class="stock">Stock: ${p.stock}</div>` : '');
     const div = document.createElement('div');
     div.className = 'product';
     div.innerHTML = `
       <div class="info">
         <div class="name">${p.name}</div>
-        <div class="price">$${p.price}</div>
+        <div class="tiers">1: $${p1} &nbsp; 2: $${p2} &nbsp; 3+: $${p3}</div>
+        ${stockText}
       </div>
       <div class="qty">
         <button onclick="changeQty('${k}', -1)">−</button>
         <span id="qty-${k}">0</span>
-        <button onclick="changeQty('${k}', 1)">+</button>
+        <button onclick="changeQty('${k}', 1)" ${p.stock === 0 ? 'disabled' : ''}>+</button>
       </div>`;
     box.appendChild(div);
   }
@@ -231,7 +240,17 @@ function filterProducts() {
   updatePay();
 }
 
+function getUnitPrice(key, qty) {
+  const p = PRODUCTS[key];
+  if (!p) return 0;
+  const tiers = p.price_tiers || {"1": p.price || 0};
+  const applicable = Math.max(...Object.keys(tiers).map(Number).filter(t => t <= qty), 1);
+  return tiers[String(applicable)] || tiers["1"] || 0;
+}
+
 function changeQty(key, d) {
+  const p = PRODUCTS[key];
+  if (p && p.stock === 0 && d > 0) return;
   cart[key] = Math.max(0, (cart[key] || 0) + d);
   document.getElementById('qty-' + key).textContent = cart[key];
   updateTotal();
@@ -240,7 +259,10 @@ function changeQty(key, d) {
 function updateTotal() {
   let t = 0;
   for (const [k, q] of Object.entries(cart)) {
-    if (q > 0 && PRODUCTS[k]) t += PRODUCTS[k].price * q;
+    if (q > 0 && PRODUCTS[k]) {
+      const unit = getUnitPrice(k, q);
+      t += unit * q;
+    }
   }
   document.getElementById('total').textContent = t.toFixed(2);
   return t;
@@ -259,7 +281,10 @@ document.getElementById('network').onchange = updatePay;
 function submitOrder() {
   const items = [];
   for (const [k, q] of Object.entries(cart)) {
-    if (q > 0) items.push({ key: k, name: PRODUCTS[k].name, qty: q, price: PRODUCTS[k].price });
+    if (q > 0) {
+      const unit = getUnitPrice(k, q);
+      items.push({ key: k, name: PRODUCTS[k].name, qty: q, price: unit, line: +(unit * q).toFixed(2) });
+    }
   }
   if (!items.length) { alert('Please select at least one product'); return; }
   const address = document.getElementById('address').value.trim();
