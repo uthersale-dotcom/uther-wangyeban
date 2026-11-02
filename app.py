@@ -745,7 +745,9 @@ def order_body(order, error=""):
           <button style="width:100%;margin-top:8px">Save address</button>
         </form>
         """
-    tracking = f'<p><b>{html.escape(order["tracking"])}</b></p>' if order.get("tracking") else ""
+goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
+            addr = f'<p class="small">{html.escape(order.get("address") or "")}</p>' if order.get("address") else ""
+            tracking = f'<p><b>{html.escape(order["tracking"])}</b></p>' if order.get("tracking") else ""
     label = "Shipped" if order["status"] == "shipped" else "Address received"
     return head + f"""
     <div class="card"><b>{label}</b>
@@ -866,7 +868,7 @@ def track():
             cont = ""
             if order["status"] in ("waiting_payment", "waiting_address"):
                 cont = f'<p><a href="/order/{code}">Continue this order</a></p>'
-            result = f'<div class="card"><div class="small muted">{code}</div><h2>{label}</h2>{tracking}{cont}</div>'
+            result = f'<div class="card"><div class="small muted">{code}</div><h2>{label}</h2><div>{html.escape(goods)}</div>{addr}{tracking}{cont}</div>'
     body = f"""
     <a href="/">Shop</a><h1>Track</h1>
     <p class="muted">The order code brings you back. Before payment is checked, you return to the transaction id. After it is checked, you return to the address form. After shipping, the tracking number shows here. Keep your order code to check status anytime.</p>
@@ -1060,8 +1062,11 @@ def desk():
 
                     
     all_orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)
+    show_done = request.args.get("done") == "1"
     pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid")][:40]
     done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"][:20]
+    if show_done:
+        pending = []
     cards = []
     for order in pending:
         goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
@@ -1091,7 +1096,7 @@ def desk():
     body = f"""
     <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
     <p class="muted">回传跟踪号。新订单、付款、地址会发到管理员电报。</p>
-    <div class="pills"><a href="/desk">订单</a><a href="/desk/products">商品</a></div>
+    <div class="pills"><a href="/desk">待处理</a><a href="/desk?done=1">已完成</a><a href="/desk/products">商品</a></div>
     {note_html}
     <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
      <div class="card"><b>添加订单</b>
@@ -1109,11 +1114,13 @@ def desk():
     {''.join(cards)}
     <div class="card"><b>已完成（已回传跟踪号）</b></div>
     {''.join(
-        f'''<div class="card"><b>{order["id"]} · {order["status"]}</b>
-        <div class="muted">{html.escape(", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"]))}</div>
+        f'''<div class="card"><b>{order["id"]} · shipped</b>
+        <div class="muted">交易号 {html.escape(order.get("txid") or "—")}</div>
+        <div>{html.escape(", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"]))}</div>
+        <div class="small">{html.escape(order.get("address") or "—")}</div>
         <div>跟踪号 {html.escape(order.get("tracking") or "—")}</div></div>'''
         for order in done
-    )}
+    ) if show_done else ""}
     """
     return page("后台", body)
 
