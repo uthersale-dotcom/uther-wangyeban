@@ -1206,11 +1206,12 @@ def handle_staff(msg):
         return
 
     if text.lower().startswith("/accept"):
-        parts = text.split()
-        if len(parts) < 2:
-            reply = "用法：/accept 订单号"
+        parts = text.split(maxsplit=2)
+        if len(parts) < 3:
+            reply = "用法：/accept 订单号 交易号"
         else:
             code = parts[1].upper()
+            txid = re.sub(r"\s+", "", parts[2])
             with _lock:
                 db = load_db()
                 order = db["orders"].get(code)
@@ -1218,17 +1219,29 @@ def handle_staff(msg):
                     reply = "订单不存在。"
                 elif order["status"] != "waiting_payment":
                     reply = f"{code} 不是待付款状态。"
+                elif txid.lower() in {k.lower() for k in db["used_txids"]}:
+                    reply = "这个交易号已经用过。"
                 else:
-                    order["status"] = "waiting_address"
-                    order["verify_msg"] = "Accepted by staff"
-                    save_db(db)
-                    reply = f"{code} 已人工确认，客户可以填地址。"
-        requests.post(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            json={"chat_id": chat_id, "text": reply},
-            timeout=12,
-        )
+                    expected = float(order["unique_amount"])
+                    created_ts = parse_time(order["created"]).timestamp()
+                    if order["network"] == "BTC":
+                        ok, message, token = verify_btc(txid.lower(), order["pay_address"], expected, created_ts)
+                    elif order["network"] == "ERC20":
+                        ok, message, token = verify_erc20(txid.lower(), order["pay_address"], expected, created_ts)
+                    else:
+                        ok, message, token = verify_sol(txid, order["pay_address"], expected, created_ts)
+                    if not ok:
+                        reply = f"核验失败：{message}"
+                    else:
+                        db["used_txids"][txid] = code
+                        order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
+                        save_db(db)
+                        reply = f"{code} 补单成功。{message}\n客户现在可以填地址。"
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply}, timeout=12)
         return
+    if text.lower().startswith("/track"):
+        parts = text.split(maxsplit=2)
+        reply = save_tracking(parts[1], parts[2]) if len(parts) >= 3 else "用法：/track 订单号 跟踪号"
 
     if text.lower().startswith("/track"):
         parts = text.split(maxsplit=2)
