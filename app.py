@@ -1090,6 +1090,22 @@ def handle_staff(msg):
     chat_id = (msg.get("chat") or {}).get("id")
     if not text or chat_id not in set(US_ADMINS + INTL_ADMINS):
         return
+
+    if text.lower() in ("/pending", "/orders"):
+        db = load_db()
+        rows = [
+            f'{row["id"]} · {row["warehouse"].upper()} · {row["status"]} · {row["unique_amount"]} {row["amount_unit"]}'
+            for row in sorted(db["orders"].values(), key=lambda x: x["created"], reverse=True)
+            if row["status"] in ("waiting_payment", "waiting_address", "paid")
+        ][:30]
+        reply = "\n".join(rows) if rows else "没有待处理订单。"
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": reply[:3900]},
+            timeout=12,
+        )
+        return
+        
     if text.lower().startswith("/track"):
         parts = text.split(maxsplit=2)
         reply = save_tracking(parts[1], parts[2]) if len(parts) >= 3 else "用法：/track 订单号 跟踪号"
