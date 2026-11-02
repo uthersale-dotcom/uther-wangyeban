@@ -870,6 +870,8 @@ def track():
             cont = ""
             if order["status"] in ("waiting_payment", "waiting_address"):
                 cont = f'<p><a href="/order/{code}">Continue this order</a></p>'
+            goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
+            addr = f'<p class="small">{html.escape(order.get("address") or "")}</p>' if order.get("address") else ""
             result = f'<div class="card"><div class="small muted">{code}</div><h2>{label}</h2><div>{html.escape(goods)}</div>{addr}{tracking}{cont}</div>'
     body = f"""
     <a href="/">Shop</a><h1>Track</h1>
