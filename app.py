@@ -673,12 +673,14 @@ def shop():
             group = "tirz"
         elif "tb" in key or "bp" in key or "glow" in key or "klow" in key or "tb" in name or "bp" in name or "glow" in name or "klow" in name:
             group = "tbbp"
+        elif "tesa" in key or "tesa" in name or "ti10" in key or "ti10" in name:
+            group = "tesa"
         else:
             group = "other"
         groups[group].append(item)
     rows = []
     for group, group_items in groups.items():
-        label = {"reta": "RETA", "tirz": "tirze", "other": "Other"}.get(group, group.upper())
+        label = {"reta": "RETA", "tirz": "tirze", "tbbp": "TB / BP", "tesa": "tesa", "other": "Other"}.get(group, group.upper())
         inner = []
         for item in group_items:
             sold = item.get("stock") == 0
