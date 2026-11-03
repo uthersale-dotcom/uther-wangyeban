@@ -688,11 +688,16 @@ def shop():
     for group, group_items in groups.items():
         if group == "other":
             label = "Other"
+        elif group == "selank":
+            label = "NA SELANK / SEMAX"
         else:
             names = []
+            seen = set()
             for item in group_items:
                 n = item["name"].split()[0]
-                if n not in names:
+                low = n.lower()
+                if low not in seen:
+                    seen.add(low)
                     names.append(n)
             label = " / ".join(names[:4])
         inner = []
