@@ -577,31 +577,6 @@ def verify_sol(txid, address, expected):
             return False, f"Amount does not match. Expected about ${expected:.2f}, received ${matched:.2f} {token}.", ""
         return True, f"Verified ${matched:.2f} {token} on Solana.", token
 
-    # 原生 SOL
-    try:
-        accounts = (data.get("transaction") or {}).get("message", {}).get("accountKeys") or []
-        pre_bal = meta.get("preBalances") or []
-        post_bal = meta.get("postBalances") or []
-        sol_delta = 0.0
-        for i, acc in enumerate(accounts):
-            pubkey = acc.get("pubkey") if isinstance(acc, dict) else acc
-            if pubkey == address and i < len(pre_bal) and i < len(post_bal):
-                sol_delta = (post_bal[i] - pre_bal[i]) / 1e9
-                break
-                    if sol_delta > 0.0001:
-                        price = get_sol_price()
-                        if price <= 0:
-                            return False, "Cannot get SOL price. Try again later.", ""
-                        usd = sol_delta * price
-                        if usd < expected * 0.98:
-                            return False, f"Amount too low. Expected about ${expected:.2f}, received {sol_delta:.6f} SOL (~${usd:.2f}).", ""
-                        if usd > expected * 1.02:
-                            return False, f"Amount does not match. Expected about ${expected:.2f}, received {sol_delta:.6f} SOL (~${usd:.2f}).", ""
-                        return True, f"Verified {sol_delta:.6f} SOL (~${usd:.2f}).", "SOL"
-    except Exception:
-        pass
-    return False, "No USDC, USDT, PYUSD, or native SOL arrived at our Solana address.", ""
-
 def window_open(order):
     return now() <= parse_time(order["expires"]) + timedelta(hours=LATE_HOURS)
 
