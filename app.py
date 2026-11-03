@@ -671,6 +671,8 @@ def shop():
             group = "reta"
         elif key.startswith("ze") or key.startswith("us_ze") or key.endswith("_ze") or "_ze" in key or name.startswith("tirz") or name.startswith("tirze"):
             group = "tirz"
+        elif "tb" in key or "bp" in key or "glow" in key or "klow" in key or "tb" in name or "bp" in name or "glow" in name or "klow" in name:
+            group = "tbbp"
         else:
             group = "other"
         groups[group].append(item)
