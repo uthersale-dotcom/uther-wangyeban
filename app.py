@@ -666,11 +666,17 @@ def shop():
     groups = defaultdict(list)
     for item in items:
         key = item["key"].lower()
-        group = "reta" if key.startswith("re") else "tirz" if key.startswith("ze") or key.startswith("us_ze") else "other"
+        name = item["name"].lower()
+        if "re" in key or "reta" in name:
+            group = "reta"
+        elif "ze" in key or "tirz" in name or "tirze" in name:
+            group = "tirz"
+        else:
+            group = "other"
         groups[group].append(item)
     rows = []
     for group, group_items in groups.items():
-        label = {"reta": "RETA", "tirz": "TIRZEPATIDE", "other": "Other"}.get(group, group.upper())
+        label = {"reta": "RETA", "tirz": "tirze", "other": "Other"}.get(group, group.upper())
         inner = []
         for item in group_items:
             sold = item.get("stock") == 0
