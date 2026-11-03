@@ -504,7 +504,15 @@ def verify_erc20(txid, address, expected):
                         wei = int(tx.get("value") or "0x0", 16)
                         eth_amount = wei / 1e18
                         if eth_amount > 0.0001:
-                            return True, f"Verified {eth_amount:.6f} ETH (native).", "ETH"
+                            price = get_eth_price()
+                            if price <= 0:
+                                return False, "Cannot get ETH price. Try again later.", ""
+                            usd = eth_amount * price
+                            if usd < expected * 0.98:
+                                return False, f"Amount too low. Expected about ${expected:.2f}, received {eth_amount:.6f} ETH (~${usd:.2f}).", ""
+                            if usd > expected * 1.02:
+                                return False, f"Amount does not match. Expected about ${expected:.2f}, received {eth_amount:.6f} ETH (~${usd:.2f}).", ""
+                            return True, f"Verified {eth_amount:.6f} ETH (~${usd:.2f}).", "ETH"
                 except Exception:
                     continue
         except Exception:
@@ -580,8 +588,16 @@ def verify_sol(txid, address, expected):
             if pubkey == address and i < len(pre_bal) and i < len(post_bal):
                 sol_delta = (post_bal[i] - pre_bal[i]) / 1e9
                 break
-        if sol_delta > 0.0001:
-            return True, f"Verified {sol_delta:.6f} SOL (native).", "SOL"
+                    if sol_delta > 0.0001:
+                        price = get_sol_price()
+                        if price <= 0:
+                            return False, "Cannot get SOL price. Try again later.", ""
+                        usd = sol_delta * price
+                        if usd < expected * 0.98:
+                            return False, f"Amount too low. Expected about ${expected:.2f}, received {sol_delta:.6f} SOL (~${usd:.2f}).", ""
+                        if usd > expected * 1.02:
+                            return False, f"Amount does not match. Expected about ${expected:.2f}, received {sol_delta:.6f} SOL (~${usd:.2f}).", ""
+                        return True, f"Verified {sol_delta:.6f} SOL (~${usd:.2f}).", "SOL"
     except Exception:
         pass
     return False, "No USDC, USDT, PYUSD, or native SOL arrived at our Solana address.", ""
