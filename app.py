@@ -1014,7 +1014,6 @@ def track():
     body = f"""
     <a href="/">Shop</a><h1>Track</h1>
     <p class="muted">The order code brings you back. Before payment is checked, you return to the transaction id. After it is checked, you return to the address form. After shipping, the tracking number shows here. Keep your order code to check status anytime.</p>
-    <div class="warn">Do not share your order code. Anyone with it can see your address and tracking number.</div>
     <div style="margin-top:10px;color:#c0392b;font-weight:bold">When your package arrives, please record an unboxing video. Collect your package promptly. If it is stolen (for example from an apartment or shared address), we cannot reship. The unboxing video is only for wrong or replaced items.</div>
     <div class="warn">Do not share your order code. Anyone with it can see your address and tracking number.</div>
     <form class="row">
