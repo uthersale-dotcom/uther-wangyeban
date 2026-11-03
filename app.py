@@ -1225,11 +1225,11 @@ def handle_staff(msg):
                     expected = float(order["unique_amount"])
                     created_ts = parse_time(order["created"]).timestamp()
                     if order["network"] == "BTC":
-                        ok, message, token = verify_btc(txid.lower(), order["pay_address"], expected, created_ts)
+                        ok, message, token = verify_btc(txid.lower(), order["pay_address"], expected)
                     elif order["network"] == "ERC20":
-                        ok, message, token = verify_erc20(txid.lower(), order["pay_address"], expected, created_ts)
+                        ok, message, token = verify_erc20(txid.lower(), order["pay_address"], expected)
                     else:
-                        ok, message, token = verify_sol(txid, order["pay_address"], expected, created_ts)
+                        ok, message, token = verify_sol(txid, order["pay_address"], expected)
                     if not ok:
                         reply = f"核验失败：{message}"
                     else:
