@@ -675,6 +675,12 @@ def shop():
             group = "tbbp"
         elif "tesa" in key or "tesa" in name or "ti10" in key or "ti10" in name:
             group = "tesa"
+        elif "ghk" in key or "ahk" in key or "kpv" in key or "ghk" in name or "ahk" in name or "kpv" in name:
+            group = "ghk"
+        elif "nad" in key or "mito" in key or "mots" in key or "nad" in name or "mito" in name or "mots" in name:
+            group = "nad"
+        elif "selank" in key or "semax" in key or "selank" in name or "semax" in name:
+            group = "selank"
         else:
             group = "other"
         groups[group].append(item)
