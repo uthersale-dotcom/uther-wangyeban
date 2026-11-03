@@ -696,8 +696,9 @@ def shop():
             for item in group_items:
                 n = item["name"].split()[0]
                 low = n.lower()
-                if low not in seen:
-                    seen.add(low)
+                root = low[:4]
+                if root not in seen:
+                    seen.add(root)
                     names.append(n)
             label = " / ".join(names[:4])
         inner = []
