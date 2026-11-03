@@ -1281,7 +1281,7 @@ def handle_staff(msg):
             "📋 命令列表\n\n"
             "/pending — 待发货订单（按仓库分组）\n"
             "/orders — 同 /pending\n"
-            "/accept 订单号 交易号 — 人工确认付款\n"
+            "/budan 订单号 交易号 — 人工确认付款\n"
             "/track 订单号 跟踪号 — 回传跟踪号\n"
             "回复订单通知直接发跟踪号 — 也可以\n"
             "/cmds — 显示本帮助"
@@ -1321,10 +1321,10 @@ def handle_staff(msg):
         )
         return
 
-    if text.lower().startswith("/accept"):
+    if text.lower().startswith("/budan"):
         parts = text.split(maxsplit=2)
         if len(parts) < 3:
-            reply = "用法：/accept 订单号 交易号"
+            reply = "用法：/budan 订单号 交易号"
         else:
             code = parts[1].upper()
             txid = re.sub(r"\s+", "", parts[2])
