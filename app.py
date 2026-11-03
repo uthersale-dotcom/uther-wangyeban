@@ -991,6 +991,11 @@ def save_products(items):
         }
         if item.get("stock") not in (None, ""):
             row["stock"] = int(item["stock"])
+        if item.get("sort") not in (None, ""):
+            try:
+                row["sort"] = int(item["sort"])
+            except (TypeError, ValueError):
+                pass
         raw[item["key"]] = row
     (DATA / "products.json").write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
