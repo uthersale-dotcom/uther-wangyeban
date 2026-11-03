@@ -487,21 +487,26 @@ def verify_erc20(txid, address, expected):
             )
             payload = requests.get(url, timeout=15).json()
             tx = payload.get("result")
-            if isinstance(tx, dict) and (tx.get("to") or "").lower() == address.lower():
-                wei = int(tx.get("value") or "0x0", 16)
-                eth_amount = wei / 1e18
-                if eth_amount > 0.0001:
-                    price = get_eth_price()
-                    if price <= 0:
-                        return False, "Cannot get ETH price. Try again later.", ""
-                    usd = eth_amount * price
-                    if usd < expected * 0.95:
-                        return False, f"Amount too low. Expected about ${expected:.2f}, received {eth_amount:.6f} ETH (~${usd:.2f}).", ""
-                    if usd > expected * 1.12:
-                        return False, f"Amount does not match. Expected about ${expected:.2f}, received {eth_amount:.6f} ETH (~${usd:.2f}).", ""
-                    return True, f"Verified {eth_amount:.6f} ETH (~${usd:.2f}).", "ETH"
-        except Exception:
-            pass
+            if not isinstance(tx, dict):
+                return False, f"Etherscan no result: {payload.get('result') or payload}", ""
+            to_addr = (tx.get("to") or "").lower()
+            if to_addr != address.lower():
+                return False, f"ETH not to our address. Actual: {tx.get('to')}", ""
+            wei = int(tx.get("value") or "0x0", 16)
+            eth_amount = wei / 1e18
+            if eth_amount <= 0:
+                return False, "No native ETH in this tx (value=0).", ""
+            price = get_eth_price()
+            if price <= 0:
+                return False, "Cannot get ETH price.", ""
+            usd = eth_amount * price
+            if usd < expected * 0.95:
+                return False, f"Too low. Expected ${expected:.2f}, got {eth_amount:.6f} ETH (~${usd:.2f}).", ""
+            if usd > expected * 1.12:
+                return False, f"Too high. Expected ${expected:.2f}, got {eth_amount:.6f} ETH (~${usd:.2f}).", ""
+            return True, f"Verified {eth_amount:.6f} ETH (~${usd:.2f}).", "ETH"
+        except Exception as e:
+            return False, f"ETH check error: {e}", ""
         return False, "No USDT, USDC, or native ETH arrived at our address.", ""
     if amount < expected * 0.995:
         return False, f"Amount too low. Expected about ${expected:.2f}, received ${amount:.2f} {token}.", ""
