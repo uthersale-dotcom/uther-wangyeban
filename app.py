@@ -1321,6 +1321,32 @@ def handle_staff(msg):
         )
         return
 
+    if text.lower().startswith("/order "):
+        code = text.split(maxsplit=1)[1].strip().upper()
+        db = load_db()
+        order = db["orders"].get(code)
+        if not order:
+            reply = "订单不存在。"
+        else:
+            goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order.get("items") or [])
+            addr = (order.get("address") or "").strip() or "还没有地址"
+            reply = (
+                f"📦 {code}\n"
+                f"{order['warehouse'].upper()} · {order['network']}\n"
+                f"状态：{order['status']}\n"
+                f"应付：{order['unique_amount']} {order['amount_unit']}\n"
+                f"产品：{goods}\n"
+                f"交易号：{order.get('txid') or '无'}\n"
+                f"跟踪号：{order.get('tracking') or '无'}\n"
+                f"地址：\n{addr}"
+            )
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": reply[:3900]},
+            timeout=12,
+        )
+        return
+
     if text.lower().startswith("/budan"):
         parts = text.split(maxsplit=2)
         if len(parts) < 3:
