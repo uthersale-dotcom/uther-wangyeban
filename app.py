@@ -562,14 +562,29 @@ def verify_sol(txid, address, expected):
         if delta > 0:
             matched += delta
             token = SOL_MINTS[mint]
-    if not token:
-        return False, "No USDC, USDT, or PYUSD arrived at our Solana address.", ""
-    if matched < expected * 0.995:
-        return False, f"Amount too low. Expected about ${expected:.2f}, received ${matched:.2f} {token}.", ""
-    if matched > expected * 1.02:
-        return False, f"Amount does not match. Expected about ${expected:.2f}, received ${matched:.2f} {token}.", ""
-    return True, f"Verified ${matched:.2f} {token} on Solana.", token
+    if token:
+        if matched < expected * 0.995:
+            return False, f"Amount too low. Expected about ${expected:.2f}, received ${matched:.2f} {token}.", ""
+        if matched > expected * 1.02:
+            return False, f"Amount does not match. Expected about ${expected:.2f}, received ${matched:.2f} {token}.", ""
+        return True, f"Verified ${matched:.2f} {token} on Solana.", token
 
+    # 原生 SOL
+    try:
+        accounts = (data.get("transaction") or {}).get("message", {}).get("accountKeys") or []
+        pre_bal = meta.get("preBalances") or []
+        post_bal = meta.get("postBalances") or []
+        sol_delta = 0.0
+        for i, acc in enumerate(accounts):
+            pubkey = acc.get("pubkey") if isinstance(acc, dict) else acc
+            if pubkey == address and i < len(pre_bal) and i < len(post_bal):
+                sol_delta = (post_bal[i] - pre_bal[i]) / 1e9
+                break
+        if sol_delta > 0.0001:
+            return True, f"Verified {sol_delta:.6f} SOL (native).", "SOL"
+    except Exception:
+        pass
+    return False, "No USDC, USDT, PYUSD, or native SOL arrived at our Solana address.", ""
 
 def window_open(order):
     return now() <= parse_time(order["expires"]) + timedelta(hours=LATE_HOURS)
