@@ -800,7 +800,8 @@ def order_body(order, error=""):
         <div style="font-size:28px" id="ordercode">{order["id"]}</div>
         <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('ordercode').textContent);this.textContent='Copied'" style="padding:8px 14px">Copy</button>
       </div>
-      <div class="muted">Keep this code. If the page closes, open Track and enter it.</div></div>
+      <div class="muted">Keep this code. If the page closes, open Track and enter it.</div>
+      <div class="warn" style="margin-top:8px">Do not share this code. Anyone with it can see your address and tracking number.</div></div>
     <div class="card">{items}<div class="row" style="margin-top:8px"><span>Catalog total</span><b>${order["total"]:.2f}</b></div></div>
     {err}
     """
@@ -971,6 +972,7 @@ def track():
     body = f"""
     <a href="/">Shop</a><h1>Track</h1>
     <p class="muted">The order code brings you back. Before payment is checked, you return to the transaction id. After it is checked, you return to the address form. After shipping, the tracking number shows here. Keep your order code to check status anytime.</p>
+    <div class="warn">Do not share your order code. Anyone with it can see your address and tracking number.</div>
     <form class="row">
       <input name="id" value="{html.escape(code)}" placeholder="Uxxxxxxx" style="text-transform:uppercase">
       <button>Check</button>
