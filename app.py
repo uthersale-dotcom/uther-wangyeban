@@ -48,8 +48,8 @@ from flask import Flask, redirect, render_template_string, request, session, url
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "uther-web-order-desk")
 
-BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN") or "8501248532:AAG_dJrb3hETUlMZ3v7NQlkh2lH9tHX-C88").strip()
-DESK_KEY = os.environ.get("DESK_KEY", "desk-uther").strip()
+BOT_TOKEN = (os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+DESK_KEY = os.environ.get("DESK_KEY", "").strip()
 US_ADMINS = [5922115358, 8329090358]
 INTL_ADMINS = [5922115358, 8329090358, 8615921011]
 
