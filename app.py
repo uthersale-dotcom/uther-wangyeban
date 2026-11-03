@@ -478,12 +478,44 @@ def verify_erc20(txid, address, expected):
         amount += int(log.get("data") or "0x0", 16) / 1_000_000
         token = "USDT" if contract == USDT.lower() else "USDC"
     if not token:
-        return False, "No USDT or USDC transfer to our address in this transaction.", ""
+        # 检查原生 SOL
+        try:
+            accounts = (data.get("transaction") or {}).get("message", {}).get("accountKeys") or []
+            pre_bal = meta.get("preBalances") or []
+            post_bal = meta.get("postBalances") or []
+            sol_delta = 0.0
+            for i, acc in enumerate(accounts):
+                pubkey = acc.get("pubkey") if isinstance(acc, dict) else acc
+                if pubkey == address and i < len(pre_bal) and i < len(post_bal):
+                    sol_delta = (post_bal[i] - pre_bal[i]) / 1e9
+                    break
+            if sol_delta > 0.0001:
+                return True, f"Verified {sol_delta:.6f} SOL (native). Amount not auto-matched to USD.", "SOL"
+        except Exception:
+            pass
+        return False, "No USDC, USDT, PYUSD, or native SOL arrived at our Solana address.", ""
     if amount < expected * 0.995:
         return False, f"Amount too low. Expected about ${expected:.2f}, received ${amount:.2f} {token}.", ""
     if amount > expected * 1.02:
         return False, f"Amount does not match. Expected about ${expected:.2f}, received ${amount:.2f} {token}.", ""
     return True, f"Verified ${amount:.2f} {token}.", token
+      if not token:
+        # 检查原生 ETH
+        try:
+            tx_body = {"jsonrpc": "2.0", "id": 1, "method": "eth_getTransactionByHash", "params": [hashed]}
+            for rpc in ("https://ethereum-rpc.publicnode.com", "https://rpc.ankr.com/eth"):
+                try:
+                    tx = requests.post(rpc, json=tx_body, timeout=12).json().get("result") or {}
+                    if tx.get("to", "").lower() == address.lower():
+                        wei = int(tx.get("value") or "0x0", 16)
+                        eth_amount = wei / 1e18
+                        if eth_amount > 0.0001:
+                            return True, f"Verified {eth_amount:.6f} ETH (native). Amount not auto-matched to USD.", "ETH"
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False, "No USDT, USDC, or native ETH arrived at our address.", ""
 
 
 def verify_sol(txid, address, expected):
