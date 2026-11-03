@@ -839,9 +839,9 @@ def order_body(order, error=""):
         for item in order["items"]
     )
     err = f'<p class="bad">{html.escape(error)}</p>' if error else ""
-    head = f"""
     flags = {"us": "🇺🇸", "eu": "🇪🇺", "au": "🇦🇺", "ca": "🇨🇦", "uk": "🇬🇧"}
     flag = flags.get(order["warehouse"], "")
+    head = f"""
     <div class="top"><a href="/">Shop</a><b>{order["id"]}</b></div>
     <div class="card"><div class="small muted">{flag} {order["warehouse"].upper()} · Order code</div>
       <div style="display:flex;justify-content:space-between;align-items:center">
