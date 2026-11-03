@@ -662,19 +662,28 @@ def shop():
         f'<a class="{"on" if code == wh else ""}" href="/?wh={code}">{label}</a>'
         for code, label in WAREHOUSES
     )
-    rows = []
+    from collections import defaultdict
+    groups = defaultdict(list)
     for item in items:
-        sold = item.get("stock") == 0
-        stock = ""
-        if sold:
-            stock = '<div class="small muted">Sold out</div>'
-        elif item.get("stock"):
-            stock = f'<div class="small muted">{item["stock"]} left</div>'
-        disabled = "disabled" if sold else ""
+        key = item["key"].lower()
+        group = "reta" if key.startswith("re") else "tirz" if key.startswith("ze") or key.startswith("us_ze") else "other"
+        groups[group].append(item)
+    rows = []
+    for group, group_items in groups.items():
+        label = {"reta": "RETA", "tirz": "TIRZEPATIDE", "other": "Other"}.get(group, group.upper())
+        inner = []
+        for item in group_items:
+            sold = item.get("stock") == 0
+            stock = '<div class="small muted">Sold out</div>' if sold else (f'<div class="small muted">{item["stock"]} left</div>' if item.get("stock") else "")
+            disabled = "disabled" if sold else ""
+            inner.append(
+                f'<div class="row" style="padding:8px 0;border-top:1px solid #eee"><div><b>{html.escape(item["name"])}</b>'
+                f'<div class="small" style="color:#1e6b3a">{html.escape(tier_label(item))}</div>{stock}</div>'
+                f'<input class="qty" type="number" min="0" max="50" name="qty_{html.escape(item["key"])}" value="0" {disabled}></div>'
+            )
         rows.append(
-            f'<div class="card"><div class="row"><div><b>{html.escape(item["name"])}</b>'
-            f'<div class="small" style="color:#1e6b3a">{html.escape(tier_label(item))}</div>{stock}</div>'
-            f'<input class="qty" type="number" min="0" max="50" name="qty_{html.escape(item["key"])}" value="0" {disabled}></div></div>'
+            f'<details class="card"><summary style="cursor:pointer;font-weight:bold;padding:4px 0">{label} ({len(group_items)})</summary>'
+            f'{"".join(inner)}</details>'
         )
     body = f"""
     <div class="top"><div><div class="small muted">UTHER</div><h1>Order desk</h1></div><a href="/track">Track</a></div>
