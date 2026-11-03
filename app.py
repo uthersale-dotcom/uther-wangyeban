@@ -680,7 +680,15 @@ def shop():
         groups[group].append(item)
     rows = []
     for group, group_items in groups.items():
-        label = {"reta": "RETA", "tirz": "tirze", "tbbp": "TB / BP", "tesa": "tesa", "other": "Other"}.get(group, group.upper())
+        if group == "other":
+            label = "Other"
+        else:
+            names = []
+            for item in group_items:
+                n = item["name"].split()[0]
+                if n not in names:
+                    names.append(n)
+            label = " / ".join(names[:4])
         inner = []
         for item in group_items:
             sold = item.get("stock") == 0
