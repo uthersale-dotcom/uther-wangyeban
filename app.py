@@ -1280,7 +1280,7 @@ def handle_staff(msg):
         reply = (
             "📋 命令列表\n\n"
             "/pending — 待发货订单（按仓库分组）\n"
-            "/orders — 同 /pending\n"
+            "/order — 订单号 看原始订单 \n"
             "/budan 订单号 交易号 — 人工确认付款\n"
             "/track 订单号 跟踪号 — 回传跟踪号\n"
             "回复订单通知直接发跟踪号 — 也可以\n"
