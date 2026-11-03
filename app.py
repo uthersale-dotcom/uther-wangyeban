@@ -1347,7 +1347,6 @@ def handle_staff(msg):
         )
         return
 
-    if text.lower().startswith("/budan"):
         parts = text.split(maxsplit=2)
         if len(parts) < 3:
             reply = "用法：/budan 订单号 交易号"
