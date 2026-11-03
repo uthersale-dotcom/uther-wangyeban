@@ -1441,11 +1441,12 @@ def handle_staff(msg):
         return
 
     if text.lower().startswith("/checktxid"):
-        parts = text.split(maxsplit=1)
-        if len(parts) < 2:
-            reply = "用法：/checktxid 交易号"
+        parts = text.split(maxsplit=2)
+        if len(parts) < 3:
+            reply = "用法：/checktxid 订单号 交易号"
         else:
-            txid = re.sub(r"\s+", "", parts[1])
+            code = parts[1].upper()
+            txid = re.sub(r"\s+", "", parts[2])
             db = load_db()
             used = db.get("used_txids") or {}
             found = None
@@ -1454,9 +1455,12 @@ def handle_staff(msg):
                     found = v
                     break
             if found:
-                reply = f"交易号已被订单 {found} 使用。"
+                if found == code:
+                    reply = f"交易号 {txid} 已被本订单 {code} 使用。"
+                else:
+                    reply = f"交易号 {txid} 已被其他订单 {found} 使用，不是 {code}。"
             else:
-                reply = f"交易号 {txid} 未被使用。"
+                reply = f"交易号 {txid} 未被任何订单使用。可绑定到 {code}。"
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply}, timeout=12)
         return
 
