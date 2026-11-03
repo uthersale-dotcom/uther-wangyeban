@@ -258,8 +258,14 @@ def products():
                 }
                 if "stock" in value:
                     item["stock"] = value["stock"]
+                if "sort" in value:
+                    try:
+                        item["sort"] = int(value["sort"])
+                    except (TypeError, ValueError):
+                        pass
                 out.append(item)
             if out:
+                out.sort(key=lambda x: (x.get("sort", 999), x["key"]))
                 return out
         except Exception:
             pass
@@ -955,6 +961,18 @@ def desk_products():
                     items.append(row)
                 save_products(items)
                 note = f"商品 {key} 已保存。"
+        elif action == "set_sort" and request.form.get("key"):
+            key = request.form.get("key")
+            try:
+                sort_val = int(request.form.get("sort") or 999)
+            except ValueError:
+                sort_val = 999
+            path = DATA / "products.json"
+            raw = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            if key in raw:
+                raw[key]["sort"] = sort_val
+                path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+                note = f"{key} 排序已设为 {sort_val}"
         elif action == "delete_product":
             key = (request.form.get("key") or "").strip()
             items = [item for item in products() if item["key"] != key]
@@ -986,6 +1004,7 @@ def desk_products():
         f'''<div class="card"><b>{html.escape(item["key"])}</b>
         <div>{html.escape(item["name"])}</div>
         <div class="muted">{html.escape(tier_label(item))} · 库存 {item.get("stock", "不限")}</div>
+        <form method="post" style="margin-top:8px"><input type="hidden" name="action" value="set_sort"><input type="hidden" name="key" value="{html.escape(item["key"])}"><input name="sort" type="number" value="{item.get("sort", "")}" style="width:80px" placeholder="排序"><button>保存</button></form>
         <form method="post"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="key" value="{html.escape(item["key"])}"><button>删除</button></form></div>'''
         for item in products() if item["warehouse"] == wh_filter
     )}
