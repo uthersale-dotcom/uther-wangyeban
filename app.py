@@ -477,23 +477,7 @@ def verify_erc20(txid, address, expected):
             continue
         amount += int(log.get("data") or "0x0", 16) / 1_000_000
         token = "USDT" if contract == USDT.lower() else "USDC"
-    if not token:
-        # 检查原生 SOL
-        try:
-            accounts = (data.get("transaction") or {}).get("message", {}).get("accountKeys") or []
-            pre_bal = meta.get("preBalances") or []
-            post_bal = meta.get("postBalances") or []
-            sol_delta = 0.0
-            for i, acc in enumerate(accounts):
-                pubkey = acc.get("pubkey") if isinstance(acc, dict) else acc
-                if pubkey == address and i < len(pre_bal) and i < len(post_bal):
-                    sol_delta = (post_bal[i] - pre_bal[i]) / 1e9
-                    break
-            if sol_delta > 0.0001:
-                return True, f"Verified {sol_delta:.6f} SOL (native). Amount not auto-matched to USD.", "SOL"
-        except Exception:
-            pass
-        return False, "No USDC, USDT, PYUSD, or native SOL arrived at our Solana address.", ""
+
     if not token:
         try:
             tx_body = {"jsonrpc": "2.0", "id": 1, "method": "eth_getTransactionByHash", "params": [hashed]}
