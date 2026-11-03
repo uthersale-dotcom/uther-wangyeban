@@ -1279,17 +1279,24 @@ def handle_staff(msg):
     if text.lower() in ("/pending", "/orders"):
         db = load_db()
         flags = {"us": "🇺🇸", "eu": "🇪🇺", "au": "🇦🇺", "ca": "🇨🇦", "uk": "🇬🇧"}
-        lines = []
+        names = {"us": "USA", "eu": "Europe", "au": "Australia", "ca": "Canada", "uk": "UK"}
+        lines = ["📦 待发货"]
+        total = 0
         for wh, label in WAREHOUSES:
             rows = [
-                f'{flags.get(wh,"")} {row["id"]} · {row["status"]} · {row["unique_amount"]} {row["amount_unit"]}'
-                for row in sorted(db["orders"].values(), key=lambda x: x["created"], reverse=True)
+                row for row in sorted(db["orders"].values(), key=lambda x: x["created"], reverse=True)
                 if row["warehouse"] == wh and row["status"] in ("waiting_address", "paid") and row.get("address")
-            ][:10]
-            if rows:
-                lines.append(f"{flags.get(wh,'')} {label}")
-                lines.extend(rows)
-        reply = "\n".join(lines) if lines else "没有待处理订单。"
+            ]
+            total += len(rows)
+            lines.append(f"\n{flags.get(wh,'')} {names.get(wh, label)}（{len(rows)}）")
+            if not rows:
+                lines.append("  无")
+            else:
+                for row in rows[:40]:
+                    name = (row.get("address") or "").split("\n")[0][:30]
+                    lines.append(f"{row['id']}  {name}")
+        lines[0] = f"📦 待发货（{total} 单）"
+        reply = "\n".join(lines)
         requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
             json={"chat_id": chat_id, "text": reply[:3900]},
