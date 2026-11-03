@@ -1009,7 +1009,7 @@ def track():
             addr = f'<p class="small">{html.escape(order.get("address") or "")}</p>' if order.get("address") else ""
             unbox = ""
             if order["status"] == "shipped":
-                unbox = '<div class="warn" style="margin-top:10px">When your package arrives, please record an unboxing video. Collect your package promptly. If it is stolen (for example from an apartment or shared address), we cannot reship. The unboxing video is only for wrong or replaced items.</div>'
+                unbox = '<div style="margin-top:10px;color:#c0392b;font-weight:bold">When your package arrives, please record an unboxing video. Collect your package promptly. If it is stolen (for example from an apartment or shared address), we cannot reship. The unboxing video is only for wrong or replaced items.</div>'
             result = f'<div class="card"><div class="small muted">{code}</div><h2>{label}</h2><div>{html.escape(goods)}</div>{addr}{tracking}{cont}{unbox}</div>'
     body = f"""
     <a href="/">Shop</a><h1>Track</h1>
