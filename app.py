@@ -949,6 +949,11 @@ def submit_txid(code):
         if not ok:
             recent.append(now().timestamp())
             _fails[code] = recent
+            tried = order.get("tried_txids") or []
+            if txid not in tried:
+                tried.append(txid)
+            order["tried_txids"] = tried
+            save_db(db)
             return page(code, order_body(order, message) + f'<p><a href="{support_for(order["warehouse"])}">Contact support on Telegram</a></p>')
         db["used_txids"][txid] = code
         order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
@@ -1454,11 +1459,19 @@ def handle_staff(msg):
                 if k.lower() == txid.lower():
                     found = v
                     break
+            tried_for = []
+            for oid, o in db["orders"].items():
+                for t in (o.get("tried_txids") or []):
+                    if t.lower() == txid.lower():
+                        tried_for.append(oid)
+                        break
             if found:
                 if found == code:
                     reply = f"交易号 {txid} 已被本订单 {code} 使用。"
                 else:
                     reply = f"交易号 {txid} 已被其他订单 {found} 使用，不是 {code}。"
+            elif tried_for:
+                reply = f"交易号 {txid} 曾被订单 {', '.join(tried_for)} 尝试提交，但核验失败。可绑定到 {code}。"
             else:
                 reply = f"交易号 {txid} 未被任何订单使用。可绑定到 {code}。"
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply}, timeout=12)
