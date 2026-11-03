@@ -732,7 +732,7 @@ def shop():
         <div class="muted">Payment network</div>
         <div class="nets">
           <label><input type="radio" name="network" value="ERC20" checked><span>USDT / USDC (Ethereum)</span></label>
-          <label><input type="radio" name="network" value="SOL"><span>USDC/USDT (Solana)</span></label>
+          <label><input type="radio" name="network" value="SOL"><span>USDC / USDT / PYUSD (Solana)</span>
           <label><input type="radio" name="network" value="BTC"><span>Bitcoin</span></label>
         </div>
       </div>
