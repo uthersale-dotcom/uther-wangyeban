@@ -852,19 +852,21 @@ def submit_address(code):
         order["address"] = address
         order["status"] = "paid"
         save_db(db)
-    items = "\n".join(f"{item['name']} × {item['qty']}" for item in order["items"])
-    when = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M")
+    items = "\n".join(f"• {item['name']} × {item['qty']}" for item in order["items"])
+    when = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
     flags = {"us": "🇺🇸", "eu": "🇪🇺", "au": "🇦🇺", "ca": "🇨🇦", "uk": "🇬🇧"}
     flag = flags.get(order["warehouse"], "")
     notify(order["warehouse"], (
-        f"地址已提交 {code}\n"
-        f"{when} (UTC+3)\n"
-        f"{flag} {order['warehouse'].upper()} · {order['network']}\n"
-        f"应付 {order['unique_amount']} {order['amount_unit']}\n"
-        f"交易号 {order.get('txid') or '人工确认'}\n"
-        f"{items}\n\n"
-        f"{address}\n\n"
-        f"回复这条消息发跟踪号，或到网站 /desk 回传。发货时请录制开箱视频。"
+        f"📦 NEW COMPLETE ORDER\n"
+        f"{when} (UTC+8)\n\n"
+        f"Order: {code}\n"
+        f"Warehouse: {flag} {order['warehouse'].upper()}\n\n"
+        f"Items:\n{items}\n\n"
+        f"Paid: {order['unique_amount']} {order['amount_unit']}\n"
+        f"Network: {order['network']}\n"
+        f"TXID:\n{order.get('txid') or '人工确认'}\n\n"
+        f"🚚 Address:\n{address}\n\n"
+        f"回复这条消息发跟踪号，或到网站 /desk 回传。"
     ))
     return redirect(url_for("order_page", code=code))
 
