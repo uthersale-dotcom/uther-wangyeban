@@ -391,11 +391,19 @@ def validate_address(text, wh):
     return ""
 
 
-def notify(warehouse, text):
+def notify(warehouse, text, paid=False):
     if not BOT_TOKEN:
         return
-    ids = US_ADMINS if warehouse == "us" else INTL_ADMINS
-    for chat_id in ids:
+    main = 5922115358
+    us_cs = 8329090358
+    intl_cs = 8615921011
+    targets = [main]
+    if paid:
+        if warehouse == "us":
+            targets.append(us_cs)
+        else:
+            targets.append(intl_cs)
+    for chat_id in set(targets):
         try:
             requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -822,7 +830,7 @@ def checkout():
         }
         db["orders"][code] = order
         save_db(db)
-    notify(wh, f"新网页订单 {code}\n{wh.upper()} · {network}\n应付 {amount} {unit}\n客户用这个订单号可以回到付款页。")
+    notify(wh, f"新网页订单 {code}\n{wh.upper()} · {network}\n应付 {amount} {unit}\n客户用这个订单号可以回到付款页。", paid=False)
     return redirect(url_for("order_page", code=code))
 
 
@@ -944,7 +952,7 @@ def submit_txid(code):
         order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
         save_db(db)
         _fails.pop(code, None)
-    notify(order["warehouse"], f"付款已核验 {code}\n{order['warehouse'].upper()} · {order['network']} · {order['unique_amount']} {order['amount_unit']}\n{message}\n客户现在才能填地址。页面关了也用同一订单号回来。")
+    notify(order["warehouse"], f"付款已核验 {code}\n{order['warehouse'].upper()} · {order['network']} · {order['unique_amount']} {order['amount_unit']}\n{message}\n客户现在才能填地址。页面关了也用同一订单号回来。", paid=True)
     return redirect(url_for("order_page", code=code))
 
 
