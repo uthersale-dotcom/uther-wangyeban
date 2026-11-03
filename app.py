@@ -795,7 +795,11 @@ def order_body(order, error=""):
     err = f'<p class="bad">{html.escape(error)}</p>' if error else ""
     head = f"""
     <div class="top"><a href="/">Shop</a><b>{order["id"]}</b></div>
-    <div class="card"><div class="small muted">Order code</div><div style="font-size:28px">{order["id"]}</div>
+    <div class="card"><div class="small muted">Order code</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:28px" id="ordercode">{order["id"]}</div>
+        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('ordercode').textContent);this.textContent='Copied'" style="padding:8px 14px">Copy</button>
+      </div>
       <div class="muted">Keep this code. If the page closes, open Track and enter it.</div></div>
     <div class="card">{items}<div class="row" style="margin-top:8px"><span>Catalog total</span><b>${order["total"]:.2f}</b></div></div>
     {err}
