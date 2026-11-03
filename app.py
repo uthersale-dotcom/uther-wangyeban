@@ -742,7 +742,8 @@ def order_body(order, error=""):
         return head + f"""
         <div class="warn">The price lock lasts 45 minutes. You can still submit the transaction id for 24 hours after that. Do not pay a second time. Come back with code {order["id"]}.</div>
         <div class="card"><div class="small muted">Send exactly</div>
-          <div style="font-size:24px">{order["unique_amount"]} {order["amount_unit"]}</div>
+          <div style="font-size:24px" id="payamt">{order["unique_amount"]} {order["amount_unit"]}</div>
+          <button type="button" style="margin-top:8px" onclick="navigator.clipboard.writeText('{order["unique_amount"]}');this.textContent='Copied'">Copy amount</button>
           <div class="small muted" style="margin-top:10px">{order["network"]}</div>
           <div id="payaddr" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;background:#fff;border:1px solid #d5e0d5;border-radius:12px;padding:12px;margin-top:8px">{html.escape(order["pay_address"])}</div>
           <button type="button" style="width:100%;margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('payaddr').textContent);this.textContent='Copied'">Copy address</button>
