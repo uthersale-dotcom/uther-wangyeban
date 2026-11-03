@@ -494,6 +494,22 @@ def verify_erc20(txid, address, expected):
         except Exception:
             pass
         return False, "No USDC, USDT, PYUSD, or native SOL arrived at our Solana address.", ""
+    if not token:
+        try:
+            tx_body = {"jsonrpc": "2.0", "id": 1, "method": "eth_getTransactionByHash", "params": [hashed]}
+            for rpc in ("https://ethereum-rpc.publicnode.com", "https://rpc.ankr.com/eth"):
+                try:
+                    tx = requests.post(rpc, json=tx_body, timeout=12).json().get("result") or {}
+                    if tx.get("to", "").lower() == address.lower():
+                        wei = int(tx.get("value") or "0x0", 16)
+                        eth_amount = wei / 1e18
+                        if eth_amount > 0.0001:
+                            return True, f"Verified {eth_amount:.6f} ETH (native).", "ETH"
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False, "No USDT, USDC, or native ETH arrived at our address.", ""
     if amount < expected * 0.995:
         return False, f"Amount too low. Expected about ${expected:.2f}, received ${amount:.2f} {token}.", ""
     if amount > expected * 1.02:
