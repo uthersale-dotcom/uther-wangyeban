@@ -1276,6 +1276,23 @@ def handle_staff(msg):
     if not text or chat_id not in set(US_ADMINS + INTL_ADMINS):
         return
 
+    if text.lower() in ("/cmds", "/help", "/commands"):
+        reply = (
+            "📋 命令列表\n\n"
+            "/pending — 待发货订单（按仓库分组）\n"
+            "/orders — 同 /pending\n"
+            "/accept 订单号 交易号 — 人工确认付款\n"
+            "/track 订单号 跟踪号 — 回传跟踪号\n"
+            "回复订单通知直接发跟踪号 — 也可以\n"
+            "/cmds — 显示本帮助"
+        )
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": reply},
+            timeout=12,
+        )
+        return
+
     if text.lower() in ("/pending", "/orders"):
         db = load_db()
         flags = {"us": "🇺🇸", "eu": "🇪🇺", "au": "🇦🇺", "ca": "🇨🇦", "uk": "🇬🇧"}
