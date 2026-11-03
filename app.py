@@ -417,7 +417,20 @@ def btc_still_there(txid):
     except Exception:
         return False, "查询失败"
     return False, "未知"
-  
+def get_sol_price():
+    try:
+        data = requests.get("https://api.coinbase.com/v2/prices/SOL-USD/spot", timeout=8).json()
+        return float(data["data"]["amount"])
+    except Exception:
+        return 0.0
+
+def get_eth_price():
+    try:
+        data = requests.get("https://api.coinbase.com/v2/prices/ETH-USD/spot", timeout=8).json()
+        return float(data["data"]["amount"])
+    except Exception:
+        return 0.0
+
 def verify_btc(txid, address, expected):
     if not re.fullmatch(r"[0-9a-fA-F]{64}", txid):
         return False, "Invalid BTC transaction id.", ""
