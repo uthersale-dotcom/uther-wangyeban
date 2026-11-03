@@ -667,9 +667,9 @@ def shop():
     for item in items:
         key = item["key"].lower()
         name = item["name"].lower()
-        if "re" in key or "reta" in name:
+        if key.startswith("re") or key.endswith("_re") or "_re" in key or name.startswith("reta"):
             group = "reta"
-        elif "ze" in key or "tirz" in name or "tirze" in name:
+        elif key.startswith("ze") or key.startswith("us_ze") or key.endswith("_ze") or "_ze" in key or name.startswith("tirz") or name.startswith("tirze"):
             group = "tirz"
         else:
             group = "other"
