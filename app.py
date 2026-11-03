@@ -398,11 +398,10 @@ def notify(warehouse, text, paid=False):
     us_cs = 8329090358
     intl_cs = 8615921011
     targets = [main]
-    if paid:
-        if warehouse == "us":
-            targets.append(us_cs)
-        else:
-            targets.append(intl_cs)
+    if warehouse == "us":
+        targets.append(us_cs)
+    else:
+        targets.append(intl_cs)
     for chat_id in set(targets):
         try:
             requests.post(
