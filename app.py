@@ -848,7 +848,8 @@ def order_body(order, error=""):
         <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('ordercode').textContent);this.textContent='Copied'" style="padding:8px 14px">Copy</button>
       </div>
       <div class="muted">Keep this code. If the page closes, open Track and enter it.</div>
-      <div class="warn" style="margin-top:8px">Do not share this code. Anyone with it can see your address and tracking number.</div></div>
+      <div class="warn" style="margin-top:8px">Do not share this code. Anyone with it can see your address and tracking number.</div>
+      <div style="margin-top:8px;color:#c0392b;font-weight:bold">Please copy your order code and save it to Notes or somewhere safe. If you submit a transaction id and then close the browser, we cannot track your order or find your payment.</div></div>
     <div class="card">{items}<div class="row" style="margin-top:8px"><span>Catalog total</span><b>${order["total"]:.2f}</b></div></div>
     {err}
     """
