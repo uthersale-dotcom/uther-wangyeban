@@ -480,25 +480,26 @@ def verify_erc20(txid, address, expected):
 
     if not token:
         try:
-            tx_body = {"jsonrpc": "2.0", "id": 1, "method": "eth_getTransactionByHash", "params": [hashed]}
-            for rpc in ("https://ethereum-rpc.publicnode.com", "https://rpc.ankr.com/eth"):
-                try:
-                    tx = requests.post(rpc, json=tx_body, timeout=12).json().get("result") or {}
-                    if tx.get("to", "").lower() == address.lower():
-                        wei = int(tx.get("value") or "0x0", 16)
-                        eth_amount = wei / 1e18
-                        if eth_amount > 0.0001:
-                            price = get_eth_price()
-                            if price <= 0:
-                                return False, "Cannot get ETH price. Try again later.", ""
-                            usd = eth_amount * price
-                            if usd < expected * 0.98:
-                                return False, f"Amount too low. Expected about ${expected:.2f}, received {eth_amount:.6f} ETH (~${usd:.2f}).", ""
-                            if usd > expected * 1.02:
-                                return False, f"Amount does not match. Expected about ${expected:.2f}, received {eth_amount:.6f} ETH (~${usd:.2f}).", ""
-                            return True, f"Verified {eth_amount:.6f} ETH (~${usd:.2f}).", "ETH"
-                except Exception:
-                    continue
+            url = (
+                "https://api.etherscan.io/v2/api"
+                f"?chainid=1&module=proxy&action=eth_getTransactionByHash"
+                f"&txhash={hashed}&apikey=HEYRQ59GHN9241Y3VCDGKNHR8GHYEWM73A"
+            )
+            payload = requests.get(url, timeout=15).json()
+            tx = payload.get("result")
+            if isinstance(tx, dict) and (tx.get("to") or "").lower() == address.lower():
+                wei = int(tx.get("value") or "0x0", 16)
+                eth_amount = wei / 1e18
+                if eth_amount > 0.0001:
+                    price = get_eth_price()
+                    if price <= 0:
+                        return False, "Cannot get ETH price. Try again later.", ""
+                    usd = eth_amount * price
+                    if usd < expected * 0.95:
+                        return False, f"Amount too low. Expected about ${expected:.2f}, received {eth_amount:.6f} ETH (~${usd:.2f}).", ""
+                    if usd > expected * 1.12:
+                        return False, f"Amount does not match. Expected about ${expected:.2f}, received {eth_amount:.6f} ETH (~${usd:.2f}).", ""
+                    return True, f"Verified {eth_amount:.6f} ETH (~${usd:.2f}).", "ETH"
         except Exception:
             pass
         return False, "No USDT, USDC, or native ETH arrived at our address.", ""
