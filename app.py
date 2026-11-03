@@ -1431,7 +1431,7 @@ def handle_staff(msg):
                     else:
                         ok, message, token = verify_sol(txid, order["pay_address"], expected)
                     if not ok:
-                        reply = f"核验失败：{message}"
+                        reply = f"核验失败：{message}\n交易号：{txid}"
                     else:
                         db["used_txids"][txid] = code
                         order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
@@ -1439,6 +1439,27 @@ def handle_staff(msg):
                         reply = f"{code} 补单成功。{message}\n客户现在可以填地址。"
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply}, timeout=12)
         return
+
+    if text.lower().startswith("/checktxid"):
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            reply = "用法：/checktxid 交易号"
+        else:
+            txid = re.sub(r"\s+", "", parts[1])
+            db = load_db()
+            used = db.get("used_txids") or {}
+            found = None
+            for k, v in used.items():
+                if k.lower() == txid.lower():
+                    found = v
+                    break
+            if found:
+                reply = f"交易号已被订单 {found} 使用。"
+            else:
+                reply = f"交易号 {txid} 未被使用。"
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply}, timeout=12)
+        return
+
     if text.lower().startswith("/track"):
         parts = text.split(maxsplit=2)
         reply = save_tracking(parts[1], parts[2]) if len(parts) >= 3 else "用法：/track 订单号 跟踪号"
