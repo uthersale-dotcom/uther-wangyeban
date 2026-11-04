@@ -381,8 +381,9 @@ def validate_address(text, wh):
         return "Use at least 3 lines: name, street, city and phone."
     if re.fullmatch(r"[\d\s-]+", lines[0]):
         return "The first line should be the recipient name."
-    if len(re.sub(r"\D", "", raw)) < 8:
-        return "Missing a phone number."
+    last = lines[-1].replace(" ", "").replace("-", "")
+    if not re.search(r"\+?\d{8,}", last):
+        return "Last line must be a phone number."
     if wh == "uk":
         if not re.search(r"\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b", raw, re.I):
             return "Missing a UK postcode, for example SW1A 1AA."
