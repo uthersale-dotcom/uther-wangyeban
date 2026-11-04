@@ -1192,14 +1192,14 @@ def desk():
                     still, status = btc_still_there(order["txid"])
                     if not still:
                         note = f"比特币交易已消失（{status}），不要发货。让客户重新付款。"
-                    elif not 4 <= len(tracking) <= 80:
+                    elif not 4 <= len(tracking) <= 200:
                         note = "跟踪号长度不对。"
                     else:
                         order["tracking"] = tracking
                         order["status"] = "shipped"
                         save_db(db)
                         note = f"{code} 跟踪号已保存。"
-                elif not 4 <= len(tracking) <= 80:
+                elif not 4 <= len(tracking) <= 200:
                     note = "跟踪号长度不对。"
                 else:
                     order["tracking"] = tracking
@@ -1315,7 +1315,7 @@ def desk():
 
 def save_tracking(code, tracking):
     tracking = tracking.strip()
-    if not 4 <= len(tracking) <= 80:
+    if not 4 <= len(tracking) <= 200:
         return "跟踪号长度不对。"
     with _lock:
         db = load_db()
