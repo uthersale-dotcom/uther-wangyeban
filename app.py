@@ -391,16 +391,16 @@ def validate_address(text, wh):
     return ""
 
 
-def notify(warehouse, text, paid=False):
+def notify(warehouse, text, paid=False, complete=False):
     if not BOT_TOKEN:
         return
     main = 5922115358
     us_cs = 8329090358
     intl_cs = 8615921011
     targets = [main]
-    if warehouse == "us":
+    if warehouse == "us" and complete:
         targets.append(us_cs)
-    else:
+    elif warehouse != "us":
         targets.append(intl_cs)
     for chat_id in set(targets):
         try:
@@ -997,7 +997,7 @@ def submit_address(code):
         f"TXID:\n{order.get('txid') or '人工确认'}\n\n"
         f"🚚 Address:\n{address}\n\n"
         f"回复这条消息发跟踪号，或到网站 /desk 回传。"
-    ))
+    ), complete=True)
     return redirect(url_for("order_page", code=code))
 
 
