@@ -445,7 +445,26 @@ def verify_btc(txid, address, expected):
     try:
         response = requests.get(f"https://mempool.space/api/tx/{txid.lower()}", timeout=15)
         if response.status_code == 404:
-            return False, "Transaction not found yet. Wait a minute and try again.", ""
+            # 查地址最近到账，方便对比是否被 RBF 替换
+            tip = ""
+            try:
+                addr_txs = requests.get(
+                    f"https://mempool.space/api/address/{address}/txs",
+                    timeout=10
+                ).json()
+                matches = []
+                for tx in (addr_txs or [])[:15]:
+                    for out in tx.get("vout") or []:
+                        if (out.get("scriptpubkey_address") or "").lower() == address.lower():
+                            amt = (out.get("value") or 0) / 1e8
+                            if abs(amt - expected) / expected < 0.05:  # 5% 以内视为相近
+                                conf = "已确认" if (tx.get("status") or {}).get("confirmed") else "未确认"
+                                matches.append(f"{amt:.8f} BTC ({conf}) TXID:{tx['txid'][:16]}...")
+                if matches:
+                    tip = " 相近金额到账：" + "；".join(matches[:3])
+            except Exception:
+                pass
+            return False, "Transaction not found (可能被 RBF 替换)." + tip, ""
         response.raise_for_status()
         data = response.json()
     except Exception:
