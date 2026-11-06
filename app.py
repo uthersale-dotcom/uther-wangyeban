@@ -689,6 +689,7 @@ def shop():
         f'<a class="{"on" if code == wh else ""}" href="/?wh={code}">{label}</a>'
         for code, label in WAREHOUSES
     )
+    pills += '<a href="https://test.upep.bio" target="_blank">Test Search</a>'
     from collections import defaultdict
     groups = defaultdict(list)
     for item in items:
