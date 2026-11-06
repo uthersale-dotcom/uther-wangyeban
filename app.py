@@ -850,7 +850,7 @@ def checkout():
         }
         db["orders"][code] = order
         save_db(db)
-    notify(wh, f"后台开单 {code}\n应付 {amount} {money}")
+    notify(wh, f"后台开单 {code}\n应付 {amount}")
     return redirect(url_for("order_page", code=code))
 
 
