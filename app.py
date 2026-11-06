@@ -679,18 +679,16 @@ def health():
     return "ok"
 
 
-@app.get("/<filename>.png")
-def flag(filename):
-    from flask import send_from_directory
-    return send_from_directory(".", f"{filename}.png")
+@app.get("/")
+def shop():
     wh = request.args.get("wh", "us")
     if wh not in PAY:
         wh = "us"
     items = [item for item in products() if item["warehouse"] == wh]
     FLAGS = {"us": "USA.png", "eu": "Europe_EU.png", "au": "Australia.png", "ca": "Canada.png", "uk": "UK.png"}
     pills = "".join(
-        f'<a class="{"on" if code == wh else ""}" href="/?wh={code}"><img src="/{FLAGS.get(code, "")}" style="height:16px;margin-right:4px;vertical-align:middle">{label}</a>'
-        for code, label in WAREHOUSES
+    f'<a class="{"on" if code == wh else ""}" href="/?wh={code}">{label}</a>'
+    for code, label in WAREHOUSES
     )
     pills += '<a href="https://test.upep.bio" target="_blank">Tests</a>'
     from collections import defaultdict
