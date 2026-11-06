@@ -1271,8 +1271,8 @@ def desk():
                     
     all_orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)
     show_done = request.args.get("done") == "1"
-    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid") and row.get("address")][:200]
-    done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"][:200]
+    pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid") and row.get("address")]
+    done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"]
     if show_done:
         pending = []
     cards = []
@@ -1286,7 +1286,7 @@ def desk():
           <b>{order["id"]} · {"🇺🇸" if order["warehouse"]=="us" else "🇪🇺" if order["warehouse"]=="eu" else "🇦🇺" if order["warehouse"]=="au" else "🇨🇦" if order["warehouse"]=="ca" else "🇬🇧"} {order["warehouse"].upper()} · {order["status"]}</b>
           <div class="muted">${order["total"]:.2f} · 应付 {order["unique_amount"]} {order["amount_unit"]} · {order["network"]}</div>
           <div>{html.escape(goods)}</div>
-          <div class="small muted">交易号 {html.escape(order.get("txid") or "—")}</div>
+          <div class="small muted">地址：{html.escape((order.get("address") or "").replace(chr(10), " · "))}</div>
           <form method="post">
             <input type="hidden" name="id" value="{order["id"]}">
             <div class="row" style="margin-top:8px">
