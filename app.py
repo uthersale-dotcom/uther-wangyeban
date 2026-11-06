@@ -679,8 +679,10 @@ def health():
     return "ok"
 
 
-@app.get("/")
-def shop():
+@app.get("/<filename>.png")
+def flag(filename):
+    from flask import send_from_directory
+    return send_from_directory(".", f"{filename}.png")
     wh = request.args.get("wh", "us")
     if wh not in PAY:
         wh = "us"
