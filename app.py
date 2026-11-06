@@ -850,7 +850,6 @@ def checkout():
         }
         db["orders"][code] = order
         save_db(db)
-    notify(wh, f"后台开单 {code}\n应付 {amount}")
     return redirect(url_for("order_page", code=code))
 
 
@@ -1267,7 +1266,7 @@ def desk():
                     }
                     save_db(db)
                     note = f"已开单 {code}，应付 {amount} {money}。把订单号发给客户。"
-                    notify(wh, f"后台开单 {code}\n应付 {amount} {money}")
+
 
                     
     all_orders = sorted(load_db()["orders"].values(), key=lambda row: row["created"], reverse=True)
