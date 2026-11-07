@@ -854,12 +854,12 @@ def checkout():
         db["orders"][code] = order
         save_db(db)
         if product.get("stock") is not None:
-            path = DATA / "products.json"
-            raw = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-            if product["key"] in raw and "stock" in raw[product["key"]]:
-                raw[product["key"]]["stock"] = max(0, raw[product["key"]]["stock"] - qty)
-                path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-        return redirect(url_for("order_page", code=code))
+        path = DATA / "products.json"
+        raw = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        for line in lines:
+            if line["key"] in raw and "stock" in raw[line["key"]]:
+                raw[line["key"]]["stock"] = max(0, raw[line["key"]]["stock"] - line["qty"])
+        path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def order_body(order, error=""):
