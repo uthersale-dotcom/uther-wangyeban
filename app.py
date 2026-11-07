@@ -812,6 +812,8 @@ def checkout():
             continue
         if product.get("stock") == 0:
             return page("Order", f'<p class="bad">{html.escape(product["name"])} is sold out.</p><a href="/">Back</a>'), 400
+        if product.get("stock") is not None and qty > product["stock"]:
+            return page("Order", f'<p class="bad">Only {product["stock"]} left.</p><a href="/">Back</a>'), 400
         unit = unit_price(product, qty)
         lines.append({
             "key": key,
