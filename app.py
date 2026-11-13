@@ -1231,18 +1231,20 @@ def desk():
                         elif len(txid) >= 80:
                             network = "SOL"
 
-                        # 查链上金额（目前仅 ERC20）
+                        # 查链上金额（ERC20 用 Blockchair 解析 input）
                         tx_amount = None
                         if network == "ERC20":
                             try:
-                                url = f"https://api.etherscan.io/api?module=proxy&action=eth_getTransactionByHash&txhash={txid}"
-                                r = requests.get(url, timeout=8).json()
-                                if r.get("result") and r["result"].get("value"):
-                                    val_hex = r["result"]["value"]
-                                    if val_hex.startswith("0x"):
-                                        tx_amount = int(val_hex, 16) / 1e18  # ETH
-                                        # 如果是 USDT/USDC，通常 value=0，真实金额在 input data 里
-                                        # 这里先简单处理，后续可加强
+                                url = f"https://api.blockchair.com/ethereum/dashboards/transaction/{txid}"
+                                r = requests.get(url, timeout=10).json()
+                                data = r.get("data", {}).get(txid.lower(), {}).get("transaction", {})
+                                input_hex = data.get("input_hex", "")
+                                if input_hex.startswith("a9059cbb") and len(input_hex) >= 136:
+                                    # 最后 32 字节是金额
+                                    amount_hex = input_hex[-64:]
+                                    raw = int(amount_hex, 16)
+                                    # USDT/USDC 是 6 位小数
+                                    tx_amount = raw / 1_000_000
                             except Exception:
                                 pass
 
@@ -1252,8 +1254,8 @@ def desk():
                             if o.get("status") == "waiting_payment" and o.get("network") == network:
                                 candidates.append(o)
 
-                        # 如果有链上金额，按金额接近排序
-                        if tx_amount and candidates:
+                        # 按金额接近排序
+                        if tx_amount is not None and candidates:
                             def amount_diff(o):
                                 try:
                                     return abs(float(o.get("unique_amount") or 0) - tx_amount)
@@ -1266,8 +1268,8 @@ def desk():
                         recent = candidates[:6]
                         if recent:
                             lines = [f"未被使用。同网络（{network or '未知'}）未付款订单："]
-                            if tx_amount:
-                                lines.append(f"链上金额约：{tx_amount:.4f}")
+                            if tx_amount is not None:
+                                lines.append(f"链上金额：{tx_amount:.2f}")
                             for o in recent:
                                 amt = o.get("unique_amount", "")
                                 unit = o.get("amount_unit", "")
