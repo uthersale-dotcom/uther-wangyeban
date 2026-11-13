@@ -1222,7 +1222,20 @@ def desk():
                         tracking = o.get("tracking") or "还没回传"
                         note = f"已被使用 → 订单 {found_code}<br>跟踪号：{tracking}<br>状态：{o.get('status','')}<br>仓库：{o.get('warehouse','')}"
                     else:
-                        note = "未被使用，可以补单。"
+                        # 没被提交，尝试列出最近未付款订单
+                        candidates = []
+                        for o in db["orders"].values():
+                            if o.get("status") == "waiting_payment":
+                                candidates.append(o)
+                        candidates.sort(key=lambda x: x.get("created", ""), reverse=True)
+                        recent = candidates[:5]
+                        if recent:
+                            lines = ["未被使用。可能对应以下未付款订单："]
+                            for o in recent:
+                                lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {o.get('unique_amount')} {o.get('amount_unit')} · {o.get('created','')[:16]}")
+                            note = "<br>".join(lines)
+                        else:
+                            note = "未被使用，且没有未付款订单。"
             if action == "accept" and order and order["status"] == "waiting_payment":
                 order["status"] = "waiting_address"
                 order["verify_msg"] = "Accepted by staff"
