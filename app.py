@@ -1418,6 +1418,10 @@ def desk():
     show_done = request.args.get("done") == "1"
     pending = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] in ("waiting_address", "paid") and row.get("address")]
     done = [row for row in all_orders if row["warehouse"] == wh_filter and row["status"] == "shipped"]
+    done_page = max(1, int(request.args.get("done_page", 1)))
+    done_per_page = 50
+    done_total_pages = max(1, (len(done) + done_per_page - 1) // done_per_page)
+    done = done[(done_page - 1) * done_per_page : done_page * done_per_page]
     if show_done:
         pending = []
     cards = []
@@ -1471,6 +1475,7 @@ def desk():
         <div>跟踪号 {html.escape(order.get("tracking") or "—")}</div></div>'''
         for order in done
     ) if show_done else ""}
+    {f'<div class="pills" style="margin-top:12px">' + ''.join(f'<a href="/desk?wh={wh_filter}&done=1&done_page={i}" class="{"on" if i == done_page else ""}">{i}</a>' for i in range(max(1, done_page-2), min(done_total_pages, done_page+2)+1)) + '</div>' if show_done and done_total_pages > 1 else ''}
     """
     return page("后台", body)
 
