@@ -1251,13 +1251,14 @@ def desk():
                         elif len(txid) == 64 and all(c in "0123456789abcdefABCDEF" for c in txid):
                             network = "BTC"
                             try:
-                                url = f"https://api.blockchair.com/bitcoin/dashboards/transaction/{txid}"
+                                url = f"https://blockchain.info/rawtx/{txid}"
                                 r = requests.get(url, timeout=10).json()
-                                data = r.get("data", {}).get(txid, {}).get("transaction", {})
-                                # output_total 是 satoshi
-                                out = int(data.get("output_total", 0) or 0)
-                                if out > 0:
-                                    tx_amount = out / 1e8
+                                # 找转到收款地址的金额（satoshi）
+                                outs = r.get("out") or []
+                                # 取最大一笔作为付款金额（通常是给商家的）
+                                if outs:
+                                    best = max(outs, key=lambda x: x.get("value", 0))
+                                    tx_amount = best.get("value", 0) / 1e8
                             except Exception:
                                 pass
 
