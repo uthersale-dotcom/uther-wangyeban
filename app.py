@@ -1222,55 +1222,32 @@ def desk():
                         tracking = o.get("tracking") or "还没回传"
                         note = f"已被使用 → 订单 {found_code}<br>跟踪号：{tracking}<br>状态：{o.get('status','')}<br>仓库：{o.get('warehouse','')}"
                     else:
-                        # 尝试查链上时间（目前支持 ERC20）
-                        tx_time = None
-                        tx_amount = None
+                        # 判断网络
+                        network = None
                         if txid.lower().startswith("0x") and len(txid) == 66:
-                            try:
-                                # Etherscan 公开接口（无需 key，有频率限制）
-                                url = f"https://api.etherscan.io/api?module=proxy&action=eth_getTransactionByHash&txhash={txid}"
-                                r = requests.get(url, timeout=8).json()
-                                if r.get("result"):
-                                    ts_hex = r["result"].get("timeStamp") or r["result"].get("blockNumber")
-                                    # 如果是时间戳
-                                    if ts_hex and ts_hex.startswith("0x"):
-                                        tx_time = int(ts_hex, 16)
-                                    # 金额（value 是 wei）
-                                    val_hex = r["result"].get("value", "0x0")
-                                    if val_hex and val_hex.startswith("0x"):
-                                        tx_amount = int(val_hex, 16) / 1e18
-                            except Exception:
-                                pass
+                            network = "ERC20"
+                        elif len(txid) == 64 and all(c in "0123456789abcdefABCDEF" for c in txid):
+                            network = "BTC"
+                        elif len(txid) >= 80:  # Solana signature 通常更长
+                            network = "SOL"
 
+                        # 只查同网络的未付款订单
                         candidates = []
                         for o in db["orders"].values():
-                            if o.get("status") == "waiting_payment":
+                            if o.get("status") == "waiting_payment" and o.get("network") == network:
                                 candidates.append(o)
-
-                        if tx_time:
-                            # 按时间接近排序（±30 分钟优先）
-                            def time_diff(o):
-                                try:
-                                    created = datetime.fromisoformat(o.get("created", "").replace("Z", "+00:00"))
-                                    return abs((created.timestamp() - tx_time))
-                                except Exception:
-                                    return 999999
-                            candidates.sort(key=time_diff)
-                        else:
-                            candidates.sort(key=lambda x: x.get("created", ""), reverse=True)
-
+                        candidates.sort(key=lambda x: x.get("created", ""), reverse=True)
                         recent = candidates[:6]
+
                         if recent:
-                            lines = ["未被使用。可能对应订单（按时间接近排序）："]
+                            lines = [f"未被使用。同网络（{network or '未知'}）最近未付款订单："]
                             for o in recent:
                                 amt = o.get("unique_amount", "")
                                 unit = o.get("amount_unit", "")
                                 lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {amt} {unit} · {o.get('created','')[:16]}")
-                            if tx_amount:
-                                lines.append(f"链上金额约：{tx_amount:.4f} ETH")
                             note = "\n".join(lines)
                         else:
-                            note = "未被使用，且没有未付款订单。"
+                            note = f"未被使用，且没有 {network or '该网络'} 的未付款订单。"
             if action == "accept" and order and order["status"] == "waiting_payment":
                 order["status"] = "waiting_address"
                 order["verify_msg"] = "Accepted by staff"
