@@ -1410,34 +1410,7 @@ def desk():
                             order["status"] = "paid"
                         save_db(db)
                         note = f"{code} 地址已保存。"
-            elif action == "create":
-                wh = request.form.get("warehouse", "us")
-                network = request.form.get("network", "ERC20")
-                key = request.form.get("product")
-                try:
-                    qty = int(request.form.get("qty") or 1)
-                except ValueError:
-                    qty = 1
-                product = product_by_key(key)
-                if not product or product["warehouse"] != wh or network not in PAY[wh]:
-                    note = "商品或仓库不对。"
-                else:
-                    unit = unit_price(product, qty)
-                    total = round(unit * qty, 2)
-                    amount, money = unique_amount(network, total, db["orders"])
-                    code = new_id(db["orders"])
-                    created = now()
-                    db["orders"][code] = {
-                        "id": code, "warehouse": wh, "network": network,
-                        "items": [{"key": key, "name": product["name"], "qty": qty, "unit": round(unit, 2), "line": total}],
-                        "total": total, "unique_amount": amount, "amount_unit": money,
-                        "pay_address": PAY[wh][network], "status": "waiting_payment",
-                        "txid": "", "verify_msg": "", "token": "", "address": "", "tracking": "",
-                        "created": created.isoformat(),
-                        "expires": (created + timedelta(minutes=LOCK_MINUTES)).isoformat(),
-                    }
-                    save_db(db)
-                    note = f"已开单 {code}，应付 {amount} {money}。把订单号发给客户。"
+
 
 
                     
@@ -1487,9 +1460,6 @@ def desk():
     <div class="pills"><a href="/desk?wh={wh_filter}">待处理</a><a href="/desk?wh={wh_filter}&done=1">已完成</a><a href="/desk/products">商品</a><a href="/desk/export">导出CSV</a></div>
     {note_html}
     <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
-     <div class="card"><b>添加订单</b>
-      <form method="post">
-        <input type="hidden" name="action" value="create">
         <select name="warehouse">{''.join(f'<option value="{code}">{label}</option>' for code, label in WAREHOUSES)}</select>
         <select name="product" style="margin-top:8px">{choices}</select>
         <div class="row" style="margin-top:8px">
