@@ -1458,7 +1458,13 @@ def desk():
         if order["status"] == "waiting_payment":
             accept = f'<button name="action" value="accept">人工确认付款</button>'
         try:
-            cn_time = datetime.fromisoformat(order["created"]).astimezone(timezone(timedelta(hours=8))).strftime("%m-%d %H:%M")
+            raw = order.get("created") or ""
+            if isinstance(raw, str):
+                raw = raw.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(raw)
+            else:
+                dt = raw
+            cn_time = dt.astimezone(timezone(timedelta(hours=8))).strftime("%m-%d %H:%M")
         except Exception:
             cn_time = ""
         cards.append(f"""
