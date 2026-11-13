@@ -1396,8 +1396,7 @@ def desk():
                             db.setdefault("used_txids", {})[txid] = code
                             order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
                             save_db(db)
-                            note = f"{code} 补单成功。{message}"
-                continue                          
+                            note = f"{code} 补单成功。{message}"            
             if action == "accept" and order and order["status"] == "waiting_payment":
                 order["status"] = "waiting_address"
                 order["verify_msg"] = "Accepted by staff"
