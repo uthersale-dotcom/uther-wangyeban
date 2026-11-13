@@ -1228,19 +1228,46 @@ def desk():
                             network = "ERC20"
                         elif len(txid) == 64 and all(c in "0123456789abcdefABCDEF" for c in txid):
                             network = "BTC"
-                        elif len(txid) >= 80:  # Solana signature 通常更长
+                        elif len(txid) >= 80:
                             network = "SOL"
+
+                        # 查链上金额（目前仅 ERC20）
+                        tx_amount = None
+                        if network == "ERC20":
+                            try:
+                                url = f"https://api.etherscan.io/api?module=proxy&action=eth_getTransactionByHash&txhash={txid}"
+                                r = requests.get(url, timeout=8).json()
+                                if r.get("result") and r["result"].get("value"):
+                                    val_hex = r["result"]["value"]
+                                    if val_hex.startswith("0x"):
+                                        tx_amount = int(val_hex, 16) / 1e18  # ETH
+                                        # 如果是 USDT/USDC，通常 value=0，真实金额在 input data 里
+                                        # 这里先简单处理，后续可加强
+                            except Exception:
+                                pass
 
                         # 只查同网络的未付款订单
                         candidates = []
                         for o in db["orders"].values():
                             if o.get("status") == "waiting_payment" and o.get("network") == network:
                                 candidates.append(o)
-                        candidates.sort(key=lambda x: x.get("created", ""), reverse=True)
-                        recent = candidates[:6]
 
+                        # 如果有链上金额，按金额接近排序
+                        if tx_amount and candidates:
+                            def amount_diff(o):
+                                try:
+                                    return abs(float(o.get("unique_amount") or 0) - tx_amount)
+                                except Exception:
+                                    return 999999
+                            candidates.sort(key=amount_diff)
+                        else:
+                            candidates.sort(key=lambda x: x.get("created", ""), reverse=True)
+
+                        recent = candidates[:6]
                         if recent:
-                            lines = [f"未被使用。同网络（{network or '未知'}）最近未付款订单："]
+                            lines = [f"未被使用。同网络（{network or '未知'}）未付款订单："]
+                            if tx_amount:
+                                lines.append(f"链上金额约：{tx_amount:.4f}")
                             for o in recent:
                                 amt = o.get("unique_amount", "")
                                 unit = o.get("amount_unit", "")
