@@ -1299,16 +1299,24 @@ def desk():
                             except Exception:
                                 pass
 
-                        # 只查同网络的未付款订单（ETH 主网也匹配 ERC20 订单里的 ETH 选项）
+                        # 只查同网络的未付款订单（最近 48 小时内）
+                        from datetime import datetime, timedelta, timezone
+                        cutoff = datetime.now(timezone.utc) - timedelta(hours=120)
                         candidates = []
                         for o in db["orders"].values():
                             if o.get("status") != "waiting_payment":
+                                continue
+                            # 时间过滤
+                            try:
+                                created = datetime.fromisoformat(o.get("created", "").replace("Z", "+00:00"))
+                                if created < cutoff:
+                                    continue
+                            except Exception:
                                 continue
                             onet = o.get("network")
                             if onet == network:
                                 candidates.append(o)
                             elif network == "ETH" and onet in ("ETH", "ERC20"):
-                                # 有些订单把 ETH 主网也记成 ERC20，或单独记 ETH
                                 candidates.append(o)
 
                         # 按金额接近排序
