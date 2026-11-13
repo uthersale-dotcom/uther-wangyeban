@@ -1488,6 +1488,14 @@ def desk():
         <button style="margin-top:8px;width:100%">补单核验</button>
       </form>
     </div>
+    <div class="card">
+      <b>查交易ID</b>
+      <form method="post">
+        <input type="hidden" name="action" value="check_txid">
+        <input name="txid" placeholder="只填交易ID" style="width:100%;margin-top:8px">
+        <button style="margin-top:8px;width:100%">查询</button>
+      </form>
+    </div>
     <p class="muted">回传跟踪号。新订单、付款、地址会发到管理员电报。</p>
     <div class="pills"><a href="/desk?wh={wh_filter}">待处理</a><a href="/desk?wh={wh_filter}&done=1">已完成</a><a href="/desk/products">商品</a><a href="/desk/export">导出CSV</a></div>
     {note_html}
