@@ -1224,27 +1224,77 @@ def desk():
                     else:
                         # 判断网络
                         network = None
-                        if txid.lower().startswith("0x") and len(txid) == 66:
-                            network = "ERC20"
-                        elif len(txid) == 64 and all(c in "0123456789abcdefABCDEF" for c in txid):
-                            network = "BTC"
-                        elif len(txid) >= 80:
-                            network = "SOL"
-
-                        # 查链上金额（ERC20 用 Blockchair 解析 input）
                         tx_amount = None
-                        if network == "ERC20":
+                        txid_l = txid.lower()
+
+                        # ERC20（以太坊上的 USDT/USDC）
+                        if txid_l.startswith("0x") and len(txid) == 66:
+                            network = "ERC20"
                             try:
                                 url = f"https://api.blockchair.com/ethereum/dashboards/transaction/{txid}"
                                 r = requests.get(url, timeout=10).json()
-                                data = r.get("data", {}).get(txid.lower(), {}).get("transaction", {})
+                                data = r.get("data", {}).get(txid_l, {}).get("transaction", {})
                                 input_hex = data.get("input_hex", "")
                                 if input_hex.startswith("a9059cbb") and len(input_hex) >= 136:
-                                    # 最后 32 字节是金额
-                                    amount_hex = input_hex[-64:]
-                                    raw = int(amount_hex, 16)
-                                    # USDT/USDC 是 6 位小数
+                                    raw = int(input_hex[-64:], 16)
                                     tx_amount = raw / 1_000_000
+                                else:
+                                    # 纯 ETH 转账
+                                    val = int(data.get("value", "0") or "0")
+                                    if val > 0:
+                                        network = "ETH"
+                                        tx_amount = val / 1e18
+                            except Exception:
+                                pass
+
+                        # BTC
+                        elif len(txid) == 64 and all(c in "0123456789abcdefABCDEF" for c in txid):
+                            network = "BTC"
+                            try:
+                                url = f"https://api.blockchair.com/bitcoin/dashboards/transaction/{txid}"
+                                r = requests.get(url, timeout=10).json()
+                                data = r.get("data", {}).get(txid, {}).get("transaction", {})
+                                # output_total 是 satoshi
+                                out = int(data.get("output_total", 0) or 0)
+                                if out > 0:
+                                    tx_amount = out / 1e8
+                            except Exception:
+                                pass
+
+                        # Solana（主网 SOL / USDT / USDC / PYUSD）
+                        elif len(txid) >= 80:
+                            network = "SOL"
+                            try:
+                                # 用 Solana 公开 RPC
+                                payload = {
+                                    "jsonrpc": "2.0",
+                                    "id": 1,
+                                    "method": "getTransaction",
+                                    "params": [txid, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}]
+                                }
+                                r = requests.post("https://api.mainnet-beta.solana.com", json=payload, timeout=12).json()
+                                meta = (r.get("result") or {}).get("meta") or {}
+                                # 先看余额变化（纯 SOL）
+                                pre = meta.get("preBalances") or []
+                                post = meta.get("postBalances") or []
+                                if pre and post and len(pre) > 1:
+                                    diff = (post[1] - pre[1]) / 1e9
+                                    if diff > 0.0001:
+                                        tx_amount = diff
+                                # 再看 token 转账（USDT/USDC/PYUSD）
+                                if tx_amount is None:
+                                    for ix in (meta.get("innerInstructions") or []) + [{"instructions": (r.get("result") or {}).get("transaction", {}).get("message", {}).get("instructions") or []}]:
+                                        for ins in ix.get("instructions") or []:
+                                            parsed = ins.get("parsed") or {}
+                                            if parsed.get("type") in ("transfer", "transferChecked"):
+                                                info = parsed.get("info") or {}
+                                                amt = info.get("amount") or info.get("tokenAmount", {}).get("amount")
+                                                dec = info.get("tokenAmount", {}).get("decimals") or 6
+                                                if amt:
+                                                    tx_amount = int(amt) / (10 ** int(dec))
+                                                    break
+                                        if tx_amount:
+                                            break
                             except Exception:
                                 pass
 
@@ -1269,7 +1319,7 @@ def desk():
                         if recent:
                             lines = [f"未被使用。同网络（{network or '未知'}）未付款订单："]
                             if tx_amount is not None:
-                                lines.append(f"链上金额：{tx_amount:.2f}")
+                                lines.append(f"链上金额：{tx_amount:.8f}".rstrip("0").rstrip("."))
                             for o in recent:
                                 amt = o.get("unique_amount", "")
                                 unit = o.get("amount_unit", "")
