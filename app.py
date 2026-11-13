@@ -1222,18 +1222,20 @@ def desk():
                         tracking = o.get("tracking") or "还没回传"
                         note = f"已被使用 → 订单 {found_code}<br>跟踪号：{tracking}<br>状态：{o.get('status','')}<br>仓库：{o.get('warehouse','')}"
                     else:
-                        # 没被提交，尝试列出最近未付款订单
+                        # 没被提交，列出最近未付款订单（按金额接近优先）
                         candidates = []
                         for o in db["orders"].values():
                             if o.get("status") == "waiting_payment":
                                 candidates.append(o)
                         candidates.sort(key=lambda x: x.get("created", ""), reverse=True)
-                        recent = candidates[:5]
+                        recent = candidates[:8]
                         if recent:
-                            lines = ["未被使用。可能对应以下未付款订单："]
+                            lines = ["未被使用。最近未付款订单（请对照金额）："]
                             for o in recent:
-                                lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {o.get('unique_amount')} {o.get('amount_unit')} · {o.get('created','')[:16]}")
-                            note = "<br>".join(lines)
+                                amt = o.get("unique_amount", "")
+                                unit = o.get("amount_unit", "")
+                                lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {amt} {unit} · {o.get('created','')[:16]}")
+                            note = "\n".join(lines)
                         else:
                             note = "未被使用，且没有未付款订单。"
             if action == "accept" and order and order["status"] == "waiting_payment":
@@ -1338,7 +1340,7 @@ def desk():
         f'<option value="{html.escape(item["key"])}">{html.escape(item["warehouse"].upper())} · {html.escape(item["name"])}</option>'
         for item in products()
     )
-    note_html = f'<p class="good">{html.escape(note)}</p>' if note else ""
+    note_html = f'<p class="good" style="white-space:pre-line">{html.escape(note)}</p>' if note else ""
     body = f"""
     <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
         <div class="card">
