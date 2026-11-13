@@ -1209,6 +1209,20 @@ def desk():
         with _lock:
             db = load_db()
             order = db["orders"].get(code)
+            if action == "check_txid":
+                txid = (request.form.get("txid") or "").strip()
+                if not txid:
+                    note = "请输入交易ID"
+                else:
+                    db = load_db()
+                    used = {k.lower(): v for k, v in (db.get("used_txids") or {}).items()}
+                    found_code = used.get(txid.lower())
+                    if found_code:
+                        o = db["orders"].get(found_code, {})
+                        tracking = o.get("tracking") or "还没回传"
+                        note = f"已被使用 → 订单 {found_code}<br>跟踪号：{tracking}<br>状态：{o.get('status','')}<br>仓库：{o.get('warehouse','')}"
+                    else:
+                        note = "未被使用，可以补单。"
             if action == "accept" and order and order["status"] == "waiting_payment":
                 order["status"] = "waiting_address"
                 order["verify_msg"] = "Accepted by staff"
@@ -1314,6 +1328,14 @@ def desk():
     note_html = f'<p class="good">{html.escape(note)}</p>' if note else ""
     body = f"""
     <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
+        <div class="card">
+      <b>查交易ID</b>
+      <form method="post">
+        <input type="hidden" name="action" value="check_txid">
+        <input name="txid" placeholder="输入交易ID" style="width:100%;margin-top:8px">
+        <button style="margin-top:8px;width:100%">查询</button>
+      </form>
+    </div>
     <p class="muted">回传跟踪号。新订单、付款、地址会发到管理员电报。</p>
     <div class="pills"><a href="/desk?wh={wh_filter}">待处理</a><a href="/desk?wh={wh_filter}&done=1">已完成</a><a href="/desk/products">商品</a><a href="/desk/export">导出CSV</a></div>
     {note_html}
