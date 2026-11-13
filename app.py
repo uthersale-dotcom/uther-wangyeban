@@ -1459,7 +1459,7 @@ def desk():
             accept = f'<button name="action" value="accept">人工确认付款</button>'
         cards.append(f"""
         <div class="card">
-          <b>{order["id"]} · {"🇺🇸" if order["warehouse"]=="us" else "🇪🇺" if order["warehouse"]=="eu" else "🇦🇺" if order["warehouse"]=="au" else "🇨🇦" if order["warehouse"]=="ca" else "🇬🇧"} {order["warehouse"].upper()} · {order["status"]}</b>
+          <b>{order["id"]} · {"🇺🇸" if order["warehouse"]=="us" else "🇪🇺" if order["warehouse"]=="eu" else "🇦🇺" if order["warehouse"]=="au" else "🇨🇦" if order["warehouse"]=="ca" else "🇬🇧"} {order["warehouse"].upper()} · {order["status"]} · {datetime.fromisoformat(order["created"]).astimezone(timezone(timedelta(hours=8))).strftime("%m-%d %H:%M")}</b>
           <div class="muted">${order["total"]:.2f} · 应付 {order["unique_amount"]} {order["amount_unit"]} · {order["network"]}</div>
           <div>{html.escape(goods)}</div>
           <div class="small muted">地址：{html.escape((order.get("address") or "").replace(chr(10), " · "))}</div>
