@@ -1465,8 +1465,8 @@ def desk():
             else:
                 dt = raw
             cn_time = dt.astimezone(timezone(timedelta(hours=8))).strftime("%m-%d %H:%M")
-        except Exception:
-            cn_time = ""
+        except Exception as e:
+            cn_time = str(order.get("created"))[:16]
         cards.append(f"""
         <div class="card">
           <b>{order["id"]} · {"🇺🇸" if order["warehouse"]=="us" else "🇪🇺" if order["warehouse"]=="eu" else "🇦🇺" if order["warehouse"]=="au" else "🇨🇦" if order["warehouse"]=="ca" else "🇬🇧"} {order["warehouse"].upper()} · {order["status"]} · {cn_time}</b>
