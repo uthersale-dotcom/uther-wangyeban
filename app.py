@@ -369,8 +369,11 @@ def validate_address(text, wh):
             return "Missing a US ZIP code."
         if not any(code in US_STATES for code in re.findall(r"\b([A-Za-z]{2})\b", raw)):
             return "Missing a US state code, for example CA."
-        if len(re.sub(r"\D", "", raw)) < 10:
-            return "Missing a phone number."
+        digits = re.sub(r"\D", "", raw)
+        # 去掉邮编和街道号后，剩余数字至少 10 位才算有手机号
+        phone_like = re.search(r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)", raw)
+        if not phone_like and len(digits) < 15:
+            return "Missing a valid US phone number (10 digits)."
         return ""
     if len(raw) < 15:
         return "Address is too short."
