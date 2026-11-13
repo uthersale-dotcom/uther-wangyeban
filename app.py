@@ -1460,15 +1460,7 @@ def desk():
     <div class="pills"><a href="/desk?wh={wh_filter}">待处理</a><a href="/desk?wh={wh_filter}&done=1">已完成</a><a href="/desk/products">商品</a><a href="/desk/export">导出CSV</a></div>
     {note_html}
     <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
-        <select name="warehouse">{''.join(f'<option value="{code}">{label}</option>' for code, label in WAREHOUSES)}</select>
-        <select name="product" style="margin-top:8px">{choices}</select>
-        <div class="row" style="margin-top:8px">
-          <input name="qty" type="number" min="1" max="50" value="1">
-          <select name="network"><option>ERC20</option><option>SOL</option><option>BTC</option></select>
-        </div>
-        <button style="width:100%;margin-top:8px">生成订单</button>
-      </form>
-    </div>
+
     {''.join(cards)}
     <div class="card"><b>已完成（已回传跟踪号）</b></div>
     {''.join(
