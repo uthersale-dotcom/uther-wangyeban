@@ -1273,7 +1273,14 @@ def desk():
                             for o in recent:
                                 amt = o.get("unique_amount", "")
                                 unit = o.get("amount_unit", "")
-                                lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {amt} {unit} · {o.get('created','')[:16]}")
+                                created = o.get("created", "")
+                                try:
+                                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                                    cn = dt.astimezone(timezone(timedelta(hours=8)))
+                                    time_str = cn.strftime("%m-%d %H:%M")
+                                except Exception:
+                                    time_str = created[:16]
+                                lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {amt} {unit} · {time_str}")
                             note = "\n".join(lines)
                         else:
                             note = f"未被使用，且没有 {network or '该网络'} 的未付款订单。"
