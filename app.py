@@ -1299,10 +1299,16 @@ def desk():
                             except Exception:
                                 pass
 
-                        # 只查同网络的未付款订单
+                        # 只查同网络的未付款订单（ETH 主网也匹配 ERC20 订单里的 ETH 选项）
                         candidates = []
                         for o in db["orders"].values():
-                            if o.get("status") == "waiting_payment" and o.get("network") == network:
+                            if o.get("status") != "waiting_payment":
+                                continue
+                            onet = o.get("network")
+                            if onet == network:
+                                candidates.append(o)
+                            elif network == "ETH" and onet in ("ETH", "ERC20"):
+                                # 有些订单把 ETH 主网也记成 ERC20，或单独记 ETH
                                 candidates.append(o)
 
                         # 按金额接近排序
@@ -1334,7 +1340,8 @@ def desk():
                                 lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {amt} {unit} · {time_str}")
                             note = "\n".join(lines)
                         else:
-                            note = f"未被使用，且没有 {network or '该网络'} 的未付款订单。"
+                            amt_txt = f"（链上金额：{tx_amount:.8f}".rstrip("0").rstrip(".") + "）" if tx_amount else ""
+                            note = f"未被使用，且没有 {network or '该网络'} 的未付款订单。{amt_txt}"
             if action == "accept" and order and order["status"] == "waiting_payment":
                 order["status"] = "waiting_address"
                 order["verify_msg"] = "Accepted by staff"
