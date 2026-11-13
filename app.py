@@ -1312,10 +1312,23 @@ def desk():
                                 candidates.append(o)
 
                         # 按金额接近排序
+                        eth_price = None
+                        if network == "ETH" and tx_amount is not None:
+                            try:
+                                pr = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", timeout=6).json()
+                                eth_price = float(pr.get("ethereum", {}).get("usd") or 0)
+                            except Exception:
+                                pass
+
                         if tx_amount is not None and candidates:
                             def amount_diff(o):
                                 try:
-                                    return abs(float(o.get("unique_amount") or 0) - tx_amount)
+                                    order_amt = float(o.get("unique_amount") or 0)
+                                    # ETH 订单：把 USDT 金额按实时汇率换成 ETH 再比
+                                    if network == "ETH" and eth_price and eth_price > 0:
+                                        expected_eth = order_amt / eth_price
+                                        return abs(expected_eth - tx_amount)
+                                    return abs(order_amt - tx_amount)
                                 except Exception:
                                     return 999999
                             candidates.sort(key=amount_diff)
@@ -1337,7 +1350,14 @@ def desk():
                                     time_str = cn.strftime("%m-%d %H:%M")
                                 except Exception:
                                     time_str = created[:16]
-                                lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {amt} {unit} · {time_str}")
+                                extra = ""
+                                if network == "ETH" and eth_price and eth_price > 0:
+                                    try:
+                                        exp = float(amt) / eth_price
+                                        extra = f" ≈{exp:.6f} ETH"
+                                    except Exception:
+                                        pass
+                                lines.append(f"{o['id']} · {o.get('warehouse','').upper()} · {amt} {unit}{extra} · {time_str}")
                             note = "\n".join(lines)
                         else:
                             amt_txt = f"（链上金额：{tx_amount:.8f}".rstrip("0").rstrip(".") + "）" if tx_amount else ""
