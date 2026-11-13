@@ -1370,6 +1370,34 @@ def desk():
                         else:
                             amt_txt = f"（链上金额：{tx_amount:.8f}".rstrip("0").rstrip(".") + "）" if tx_amount else ""
                             note = f"未被使用，且没有 {network or '该网络'} 的未付款订单。{amt_txt}"
+            if action == "budan":
+                txid = re.sub(r"\s+", "", request.form.get("txid") or "")
+                if not code or not txid:
+                    note = "订单号和交易ID都要填。"
+                else:
+                    order = db["orders"].get(code)
+                    if not order:
+                        note = "订单不存在。"
+                    elif order["status"] != "waiting_payment":
+                        note = f"{code} 不是待付款状态。"
+                    elif txid.lower() in {k.lower() for k in (db.get("used_txids") or {})}:
+                        note = "这个交易号已经用过。"
+                    else:
+                        expected = float(order["unique_amount"])
+                        if order["network"] == "BTC":
+                            ok, message, token = verify_btc(txid.lower(), order["pay_address"], expected)
+                        elif order["network"] == "ERC20":
+                            ok, message, token = verify_erc20(txid.lower(), order["pay_address"], expected)
+                        else:
+                            ok, message, token = verify_sol(txid, order["pay_address"], expected)
+                        if not ok:
+                            note = f"核验失败：{message}"
+                        else:
+                            db.setdefault("used_txids", {})[txid] = code
+                            order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
+                            save_db(db)
+                            note = f"{code} 补单成功。{message}"
+                continue                          
             if action == "accept" and order and order["status"] == "waiting_payment":
                 order["status"] = "waiting_address"
                 order["verify_msg"] = "Accepted by staff"
@@ -1452,12 +1480,13 @@ def desk():
     note_html = f'<p class="good" style="white-space:pre-line">{html.escape(note)}</p>' if note else ""
     body = f"""
     <div class="top"><h1>后台</h1><form method="post"><button name="action" value="logout">退出</button></form></div>
-        <div class="card">
-      <b>查交易ID</b>
+    <div class="card">
+      <b>补单</b>
       <form method="post">
-        <input type="hidden" name="action" value="check_txid">
-        <input name="txid" placeholder="输入交易ID" style="width:100%;margin-top:8px">
-        <button style="margin-top:8px;width:100%">查询</button>
+        <input type="hidden" name="action" value="budan">
+        <input name="id" placeholder="订单号" style="width:100%;margin-top:8px">
+        <input name="txid" placeholder="交易ID" style="width:100%;margin-top:8px">
+        <button style="margin-top:8px;width:100%">补单核验</button>
       </form>
     </div>
     <p class="muted">回传跟踪号。新订单、付款、地址会发到管理员电报。</p>
