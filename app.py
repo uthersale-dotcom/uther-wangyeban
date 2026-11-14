@@ -428,6 +428,40 @@ def btc_still_there(txid):
     except Exception:
         return False, "查询失败"
     return False, "未知"
+
+def check_btc_orders():
+    """定期检查已付款未发货的 BTC 订单，交易消失则标记警告"""
+    while True:
+        try:
+            with _lock:
+                db = load_db()
+                changed = False
+                for code, order in db["orders"].items():
+                    if order.get("network") != "BTC":
+                        continue
+                    if order.get("status") not in ("waiting_address", "paid"):
+                        continue
+                    if not order.get("txid"):
+                        continue
+                    if order.get("btc_confirmed"):
+                        continue
+                    
+                    still, status = btc_still_there(order["txid"])
+                    if not still:
+                        if not order.get("btc_alert"):
+                            order["btc_alert"] = True
+                            order["btc_alert_msg"] = status
+                            changed = True
+                    elif "已确认" in status:
+                        order["btc_confirmed"] = True
+                        order["btc_alert"] = False
+                        changed = True
+                if changed:
+                    save_db(db)
+        except Exception:
+            pass
+        time.sleep(300)  # 每 5 分钟检查一次
+
 def get_sol_price():
     try:
         data = requests.get("https://api.coinbase.com/v2/prices/SOL-USD/spot", timeout=8).json()
@@ -1482,8 +1516,12 @@ def desk():
             cn_time = dt.astimezone(timezone(timedelta(hours=8))).strftime("%m-%d %H:%M")
         except Exception as e:
             cn_time = str(order.get("created"))[:16]
+        alert = ""
+        if order.get("btc_alert"):
+            alert = '<div style="background:#fdf2f2;border:1px solid #c0392b;color:#c0392b;padding:8px;margin-bottom:8px;border-radius:6px"><b>⚠️ BTC 交易已消失（可能被 RBF 替换）</b><br>' + html.escape(order.get("btc_alert_msg") or "") + '</div>'
         cards.append(f"""
         <div class="card">
+          {alert}
           <b>{order["id"]} · {"🇺🇸" if order["warehouse"]=="us" else "🇪🇺" if order["warehouse"]=="eu" else "🇦🇺" if order["warehouse"]=="au" else "🇨🇦" if order["warehouse"]=="ca" else "🇬🇧"} {order["warehouse"].upper()} · {order["status"]} · {cn_time}</b>
           <div class="muted">${order["total"]:.2f} · 应付 {order["unique_amount"]} {order["amount_unit"]} · {order["network"]}</div>
           <div>{html.escape(goods)}</div>
@@ -1773,6 +1811,8 @@ def desk_export():
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": "attachment; filename=orders.xlsx"
     }
+
+threading.Thread(target=check_btc_orders, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
