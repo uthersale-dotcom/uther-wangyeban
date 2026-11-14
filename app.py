@@ -987,6 +987,9 @@ def submit_txid(code):
             if txid not in tried:
                 tried.append(txid)
             order["tried_txids"] = tried
+            if order["network"] == "BTC":
+                order["btc_alert"] = True
+                order["btc_alert_msg"] = message
             save_db(db)
             return page(code, order_body(order, message) + f'<p><a href="{support_for(order["warehouse"])}">Contact support on Telegram</a></p>')
         db["used_txids"][txid] = code
@@ -1454,6 +1457,15 @@ def desk():
     done = done[(done_page - 1) * done_per_page : done_page * done_per_page]
     if show_done:
         pending = []
+    # BTC 替换提醒
+    alerts = [o for o in load_db()["orders"].values() if o.get("btc_alert") and o.get("status") == "waiting_payment"]
+    alert_html = ""
+    if alerts:
+        alert_html = '<div class="card" style="border:2px solid #c0392b;background:#fdf2f2;margin-bottom:16px"><b style="color:#c0392b">⚠️ BTC 交易可能被替换（请核对）</b>'
+        for o in alerts[:8]:
+            tried = ", ".join((o.get("tried_txids") or [])[-3:])
+            alert_html += f'<div style="margin:10px 0;padding:8px;background:#fff;border-radius:6px">{o["id"]} · 应付 {o["unique_amount"]} BTC<br>尝试过：{html.escape(tried)}<br>{html.escape(o.get("btc_alert_msg") or "")}</div>'
+        alert_html += '</div>'
     cards = []
     for order in pending:
         goods = ", ".join(f'{item["name"]} × {item["qty"]}' for item in order["items"])
@@ -1512,6 +1524,7 @@ def desk():
     <p class="muted">回传跟踪号。新订单、付款、地址会发到管理员电报。</p>
     <div class="pills"><a href="/desk?wh={wh_filter}">待处理</a><a href="/desk?wh={wh_filter}&done=1">已完成</a><a href="/desk/products">商品</a><a href="/desk/export">导出CSV</a></div>
     {note_html}
+    {alert_html}
     <div class="pills">{''.join(f'<a class="{"on" if code == wh_filter else ""}" href="/desk?wh={code}">{label}</a>' for code, label in WAREHOUSES)}</div>
 
     {''.join(cards)}
