@@ -1021,7 +1021,7 @@ def submit_txid(code):
             if txid not in tried:
                 tried.append(txid)
             order["tried_txids"] = tried
-            if order["network"] == "BTC":
+            if order["network"] == "BTC" and len(txid) >= 60 and all(c in "0123456789abcdef" for c in txid.lower()):
                 order["btc_alert"] = True
                 order["btc_alert_msg"] = message
             save_db(db)
@@ -1442,6 +1442,11 @@ def desk():
                 order["verify_msg"] = "Accepted by staff"
                 save_db(db)
                 note = f"{code} 已人工确认。"
+            elif action == "clear_alert" and order:
+                order["btc_alert"] = False
+                order["btc_alert_msg"] = ""
+                save_db(db)
+                note = f"{code} 已标记为已核对。"
             elif action == "track" and order:
                 tracking = (request.form.get("tracking") or "").strip()
                 if not order.get("address"):
@@ -1498,7 +1503,15 @@ def desk():
         alert_html = '<div class="card" style="border:2px solid #c0392b;background:#fdf2f2;margin-bottom:16px"><b style="color:#c0392b">⚠️ BTC 交易可能被替换（请核对）</b>'
         for o in alerts[:8]:
             tried = ", ".join((o.get("tried_txids") or [])[-3:])
-            alert_html += f'<div style="margin:10px 0;padding:8px;background:#fff;border-radius:6px">{o["id"]} · 应付 {o["unique_amount"]} BTC<br>尝试过：{html.escape(tried)}<br>{html.escape(o.get("btc_alert_msg") or "")}</div>'
+            alert_html += f'''<div style="margin:10px 0;padding:8px;background:#fff;border-radius:6px">
+                {o["id"]} · 应付 {o["unique_amount"]} BTC
+                <form method="post" style="display:inline;float:right;margin:0">
+                    <input type="hidden" name="action" value="clear_alert">
+                    <input type="hidden" name="id" value="{o["id"]}">
+                    <button type="submit" style="padding:2px 10px;font-size:12px">已核对</button>
+                </form>
+                <br>尝试过：{html.escape(tried)}<br>{html.escape(o.get("btc_alert_msg") or "")}
+            </div>'''
         alert_html += '</div>'
     cards = []
     for order in pending:
