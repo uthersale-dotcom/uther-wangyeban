@@ -1531,7 +1531,15 @@ def desk():
             cn_time = str(order.get("created"))[:16]
         alert = ""
         if order.get("btc_alert"):
-            alert = '<div style="background:#fdf2f2;border:1px solid #c0392b;color:#c0392b;padding:8px;margin-bottom:8px;border-radius:6px"><b>⚠️ BTC 交易已消失（可能被 RBF 替换）</b><br>' + html.escape(order.get("btc_alert_msg") or "") + '</div>'
+            alert = f'''<div style="background:#fdf2f2;border:1px solid #c0392b;color:#c0392b;padding:8px;margin-bottom:8px;border-radius:6px">
+                <b>⚠️ BTC 交易已消失（可能被 RBF 替换）</b>
+                <form method="post" style="display:inline;float:right;margin:0">
+                    <input type="hidden" name="action" value="clear_alert">
+                    <input type="hidden" name="id" value="{order["id"]}">
+                    <button type="submit" style="padding:2px 10px;font-size:12px">已核对</button>
+                </form>
+                <br>{html.escape(order.get("btc_alert_msg") or "")}
+            </div>'''
         cards.append(f"""
         <div class="card">
           {alert}
