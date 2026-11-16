@@ -718,12 +718,41 @@ def health():
 
 @app.get("/")
 def shop():
-    wh = request.args.get("wh", "us")
+    wh = request.args.get("wh", "")
     if wh not in PAY:
-        wh = "us"
+        flags = {"us": "🇺🇸", "eu": "🇪🇺", "au": "🇦🇺", "ca": "🇨🇦", "uk": "🇬🇧"}
+        buttons = "".join(
+            f'<a href="/?wh={code}" style="display:block;background:#fff;border:1px solid #d5e0d5;border-radius:16px;padding:22px;margin:0 0 12px;text-align:center;font-size:18px;font-weight:bold;color:#1a2e1a;text-decoration:none">{flags.get(code, "")} {label}</a>'
+            for code, label in WAREHOUSES
+        )
+        body = f"""
+        <div class="top"><div><div class="small muted">UTHER</div><h1>Order desk</h1></div><a href="/track">Track</a></div>
+        <div id="recent"></div>
+        <div class="card"><div class="muted">Already started an order?</div>
+          <form action="/track" method="get" class="row" style="margin-top:8px">
+            <input name="id" placeholder="Order code" style="text-transform:uppercase">
+            <button>Open</button>
+          </form>
+        </div>
+        <p class="muted">Choose a warehouse</p>
+        {buttons}
+        <div class="pills"><a href="https://test.upep.bio" target="_blank">Tests</a></div>
+        <script>
+const key="uther-orders";
+try {{
+  const ids=JSON.parse(localStorage.getItem(key)||"[]");
+  if(Array.isArray(ids)&&ids.length){{
+    document.getElementById("recent").innerHTML=ids.slice(0,8).map(function(id){{
+      return '<div class="card" style="display:flex;justify-content:space-between;align-items:center"><a href="/order/'+id+'">Continue order <b>'+id+'</b></a><button type="button" data-id="'+id+'" onclick="var k=\\'uther-orders\\';var a=JSON.parse(localStorage.getItem(k)||\\'[]\\').filter(function(x){{return x!==this.getAttribute(\\'data-id\\')}}.bind(this));localStorage.setItem(k,JSON.stringify(a));this.parentElement.remove()" style="background:none;border:0;color:#1e6b3a;font-size:20px;padding:0 8px">×</button></div>';
+    }}).join("");
+  }}
+}} catch(e) {{}}
+        </script>
+        """
+        return page("Uther Order", body)
     items = [item for item in products() if item["warehouse"] == wh]
     FLAGS = {"us": "USA.png", "eu": "Europe_EU.png", "au": "Australia.png", "ca": "Canada.png", "uk": "UK.png"}
-    pills = "".join(
+    pills = '<a href="/">Change warehouse</a>' + "".join(
     f'<a class="{"on" if code == wh else ""}" href="/?wh={code}">{label}</a>'
     for code, label in WAREHOUSES
     )
