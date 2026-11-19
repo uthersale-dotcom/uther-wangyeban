@@ -443,7 +443,7 @@ def check_btc_orders():
                         continue
                     if not order.get("txid"):
                         continue
-                    if order.get("btc_confirmed"):
+                    if order.get("btc_confirmed") or order.get("btc_cleared"):
                         continue
                     
                     still, status = btc_still_there(order["txid"])
@@ -1474,13 +1474,14 @@ def desk():
             elif action == "clear_alert" and order:
                 order["btc_alert"] = False
                 order["btc_alert_msg"] = ""
+                order["btc_cleared"] = True
                 save_db(db)
                 note = f"{code} 已标记为已核对。"
             elif action == "track" and order:
                 tracking = (request.form.get("tracking") or "").strip()
                 if not order.get("address"):
                     note = "还没有地址，不能发货。"
-                elif order.get("network") == "BTC" and order.get("txid"):
+                elif order.get("network") == "BTC" and order.get("txid") and not order.get("btc_cleared"):
                     still, status = btc_still_there(order["txid"])
                     if not still:
                         note = f"比特币交易已消失（{status}），不要发货。让客户重新付款。"
@@ -1640,7 +1641,7 @@ def save_tracking(code, tracking):
             return "订单不存在。"
         if not order.get("address"):
             return "还没有地址，不能发货。"
-        if order.get("network") == "BTC" and order.get("txid"):
+        if order.get("network") == "BTC" and order.get("txid") and not order.get("btc_cleared"):
             still, status = btc_still_there(order["txid"])
             if not still:
                 return f"比特币交易已消失（{status}），不要发货。让客户重新付款。"
