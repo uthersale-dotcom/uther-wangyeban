@@ -1645,7 +1645,10 @@ def desk():
     ) if show_done else ""}
     {f'<div class="pills" style="margin-top:12px">' + ''.join(f'<a href="/desk?wh={wh_filter}&done=1&done_page={i}" class="{"on" if i == done_page else ""}">{i}</a>' for i in range(max(1, done_page-2), min(done_total_pages, done_page+2)+1)) + '</div>' if show_done and done_total_pages > 1 else ''}
     """
-    return page("后台", body)
+    from flask import make_response
+    resp = make_response(page("后台", body))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return resp
 
 def save_tracking(code, tracking):
     tracking = tracking.strip()
