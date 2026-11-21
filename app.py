@@ -1562,15 +1562,10 @@ def desk():
         if order["status"] == "waiting_payment":
             accept = f'<button name="action" value="accept">人工确认付款</button>'
         try:
-            raw = order.get("created") or ""
-            if isinstance(raw, str):
-                raw = raw.replace("Z", "+00:00")
-                dt = datetime.fromisoformat(raw)
-            else:
-                dt = raw
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            cn_time = dt.astimezone(timezone(timedelta(hours=8))).strftime("%m-%d %H:%M")
+            s = str(order.get("created") or "")
+            s = s.replace("Z", "").split("+")[0].split(".")[0]
+            dt = datetime.fromisoformat(s)
+            cn_time = (dt + timedelta(hours=8)).strftime("%m-%d %H:%M")
         except Exception:
             cn_time = str(order.get("created"))[:16]
         alert = ""
