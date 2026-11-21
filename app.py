@@ -1568,8 +1568,10 @@ def desk():
                 dt = datetime.fromisoformat(raw)
             else:
                 dt = raw
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
             cn_time = dt.astimezone(timezone(timedelta(hours=8))).strftime("%m-%d %H:%M")
-        except Exception as e:
+        except Exception:
             cn_time = str(order.get("created"))[:16]
         alert = ""
         if order.get("btc_alert"):
