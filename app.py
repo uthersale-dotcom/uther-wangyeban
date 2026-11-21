@@ -1369,7 +1369,6 @@ def desk():
                                 pass
 
                         # 只查同网络的未付款订单（最近 48 小时内）
-                        from datetime import datetime, timedelta, timezone
                         cutoff = datetime.now(timezone.utc) - timedelta(hours=120)
                         candidates = []
                         for o in db["orders"].values():
