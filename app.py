@@ -1466,6 +1466,18 @@ def desk():
                             order.update({"status": "waiting_address", "txid": txid, "verify_msg": message, "token": token})
                             save_db(db)
                             note = f"{code} 补单成功。{message}"            
+            if action == "force_accept":
+                code = (request.form.get("id") or "").strip().upper()
+                order = db["orders"].get(code) if code else None
+                if not order:
+                    note = "订单不存在。"
+                elif order["status"] != "waiting_payment":
+                    note = f"{code} 不是待付款状态。"
+                else:
+                    order["status"] = "waiting_address"
+                    order["verify_msg"] = "Force accepted by staff"
+                    save_db(db)
+                    note = f"{code} 已强制确认，客户可以填地址了。"
             if action == "accept" and order and order["status"] == "waiting_payment":
                 order["status"] = "waiting_address"
                 order["verify_msg"] = "Accepted by staff"
@@ -1600,6 +1612,14 @@ def desk():
         <input name="id" placeholder="订单号" style="width:100%;margin-top:8px">
         <input name="txid" placeholder="交易ID" style="width:100%;margin-top:8px">
         <button style="margin-top:8px;width:100%">补单核验</button>
+      </form>
+    </div>
+    <div class="card">
+      <b>强制确认（不核验交易）</b>
+      <form method="post">
+        <input type="hidden" name="action" value="force_accept">
+        <input name="id" placeholder="订单号" style="width:100%;margin-top:8px">
+        <button style="margin-top:8px;width:100%">强制确认</button>
       </form>
     </div>
     <div class="card">
